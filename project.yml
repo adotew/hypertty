@@ -29,6 +29,9 @@ targets:
       - path: vendor/ghostty/zig-out/share/terminfo
         type: folder
         buildPhase: resources
+      - path: Codecave/Resources/FileIcons
+        type: folder
+        buildPhase: resources
     dependencies:
       - framework: vendor/ghostty/macos/GhosttyKit.xcframework
         embed: false

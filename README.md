@@ -2,8 +2,9 @@
 
 A keyboard-driven terminal workspace for macOS, built on libghostty.
 
-Currently: Ghostty terminals in vertical tabs and splits, using your
-Ghostty config (`~/.config/ghostty/config`), themes, shaders and keybinds.
+Currently: Ghostty terminals in vertical tabs and splits, plus a file
+tree, using your Ghostty config (`~/.config/ghostty/config`), themes,
+shaders and keybinds.
 
 ## Keys
 
@@ -20,8 +21,9 @@ background, separated by gaps; drag a gap to resize. Each card is filled
 with your terminal `background`. `unfocused-split-opacity` and
 `unfocused-split-fill` dim unfocused panes.
 
-Codecave adds `⌘B` (toggle sidebar) and `⌘S` (focus sidebar). In the
-focused sidebar:
+Codecave adds `⌘B` (toggle sidebar), `⌘S` (focus the tab list) and `⌘⇧E`
+(focus the file tree). `⇥` switches between the two in the sidebar. In
+the tab list:
 
 | key | action |
 |---|---|
@@ -34,8 +36,27 @@ focused sidebar:
 | `r` | rename (empty resets to the shell title) |
 | `l`, `⏎`, `esc` | back to the terminal |
 
-`⌘S` with the sidebar hidden peeks it open; it hides again when you return
-to the terminal.
+The file tree shows the git work tree (or directory) of the focused pane,
+so it follows `cd` and pane switches. Git-ignored files are dimmed.
+
+| key | action |
+|---|---|
+| `j` / `k` | next / previous item |
+| `g` / `G` | first / last item |
+| `l`, `→` | expand folder / open file |
+| `h`, `←` | collapse folder / go to parent |
+| `⏎` | toggle folder / open file in a split to the right |
+| `t` | open file in a new tab |
+| `.` | show / hide git-ignored files |
+| `y` | copy the path |
+| `esc` | back to the terminal |
+
+Files open in `$EDITOR` (`nvim` if unset), run from an interactive login
+shell so your PATH applies. File icons are JetBrains' New UI icons (see
+`Codecave/Resources/FileIcons/NOTICE.md`).
+
+`⌘S` / `⌘⇧E` with the sidebar hidden peek it open; it hides again when you
+return to the terminal.
 
 ## Build
 
@@ -57,7 +78,9 @@ make run       # generates the Xcode project, builds and opens the app
   Zig-produced archive members.
 - `Codecave/Sources/Ghostty`: the libghostty embedding (runtime callbacks,
   the terminal NSView and its keyboard/IME/mouse handling).
-- `Codecave/Sources/Workspace`: windows, tabs, splits and the sidebar.
+- `Codecave/Sources/Workspace`: windows, tabs, splits and the sidebar
+  (tab list and file tree).
+- `Codecave/Resources/FileIcons`: file type icons.
 
 ## Debug snapshot
 

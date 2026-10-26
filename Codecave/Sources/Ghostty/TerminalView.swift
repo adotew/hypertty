@@ -6,6 +6,8 @@ struct SurfaceOptions {
     var workingDirectory: String?
     var fontSize: Float = 0
     var context = GHOSTTY_SURFACE_CONTEXT_WINDOW
+    /// Run instead of the shell; the pane closes when it exits.
+    var command: String?
 
     init() {}
 
@@ -90,8 +92,11 @@ final class TerminalView: NSView {
         config.context = options.context
 
         surface = withOptionalCString(options.workingDirectory) { cwd in
-            config.working_directory = cwd
-            return ghostty_surface_new(app, &config)
+            withOptionalCString(options.command) { command in
+                config.working_directory = cwd
+                config.command = command
+                return ghostty_surface_new(app, &config)
+            }
         }
         if surface == nil {
             NSLog("ghostty_surface_new failed")

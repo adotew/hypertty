@@ -25,6 +25,8 @@ struct Theme {
     var chrome: NSColor { background.blended(withFraction: 0.32, of: .black) ?? background }
     var selection: NSColor { foreground.withAlphaComponent(0.1) }
     var secondaryText: NSColor { foreground.withAlphaComponent(0.5) }
+    /// Picks the dark variants of the file icons.
+    var isDark: Bool { (background.usingColorSpace(.sRGB)?.brightnessComponent ?? 0) < 0.5 }
 }
 
 /// A view that fills itself with a color. Drawn (rather than using a layer

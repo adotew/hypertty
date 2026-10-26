@@ -107,8 +107,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
         let viewMenu = NSMenu(title: "View")
         viewMenu.addItem(withTitle: "Toggle Sidebar", action: #selector(WorkspaceWindowController.toggleTabSidebar(_:)),
                          keyEquivalent: "b")
-        viewMenu.addItem(withTitle: "Focus Sidebar", action: #selector(WorkspaceWindowController.focusTabSidebar(_:)),
+        viewMenu.addItem(withTitle: "Show Tabs", action: #selector(WorkspaceWindowController.focusTabSidebar(_:)),
                          keyEquivalent: "s")
+        viewMenu.addItem(withTitle: "Show Files", action: #selector(WorkspaceWindowController.focusFileSidebar(_:)),
+                         keyEquivalent: "E")
         viewMenu.addItem(withTitle: "Rename Tab…", action: #selector(WorkspaceWindowController.renameTab(_:)),
                          keyEquivalent: "")
         viewMenu.addItem(.separator())

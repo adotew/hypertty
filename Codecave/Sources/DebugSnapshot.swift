@@ -11,7 +11,8 @@ import GhosttyKit
 ///   CODECAVE_SNAPSHOT_ACTIONS='new_tab;goto_tab:1;@focusTabSidebar:;key:j'
 ///       steps run 0.5s apart: Ghostty keybind actions on the selected
 ///       terminal, `@selector:` sent through the responder chain, or
-///       `key:<chars>` typed into the first responder (`\r` for Return)
+///       `key:<chars>` typed into the first responder (`\r` for Return,
+///       `\t` for Tab)
 ///
 /// The PNG composites the window's AppKit views with the frame libghostty
 /// rendered (read back from the terminal's IOSurface-backed layer).
@@ -54,9 +55,10 @@ enum DebugSnapshot {
             let selector = Selector(String(step.dropFirst()))
             NSApp.sendAction(selector, to: workspace.responds(to: selector) ? workspace : nil, from: nil)
         } else if step.hasPrefix("key:"), let window = workspace.window {
-            let keys = step.dropFirst("key:".count).replacingOccurrences(of: "\\r", with: "\r")
+            let keys = step.dropFirst("key:".count)
+                .replacingOccurrences(of: "\\r", with: "\r").replacingOccurrences(of: "\\t", with: "\t")
             for char in keys {
-                let keyCode: UInt16 = char == "\r" ? 0x24 : 0
+                let keyCode: UInt16 = char == "\r" ? 0x24 : char == "\t" ? 0x30 : 0
                 guard let event = NSEvent.keyEvent(
                     with: .keyDown, location: .zero, modifierFlags: char.isUppercase ? .shift : [],
                     timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
@@ -111,6 +113,7 @@ enum DebugSnapshot {
             report += " \(marker)\(i + 1) \(tab.title) | \(tab.subtitle ?? "") \(tab.hasBell ? "(bell)" : "")"
             report += " panes: \(tab.paneCount)\(tab.zoomed != nil ? " (zoomed)" : "")\n"
         }
+        report += workspace.sidebarReport
         if let tab = workspace.selectedTab {
             report += "panes of selected tab (window points):\n"
             for terminal in tab.terminals {
@@ -148,6 +151,28 @@ enum DebugSnapshot {
         guard ghostty_surface_read_text(surface, selection, &text) else { return "" }
         defer { ghostty_surface_free_text(surface, &text) }
         return String(cString: text.text)
+    }
+}
+#endif
+
+#if DEBUG
+extension WorkspaceWindowController {
+    /// Sidebar mode and the file tree's visible rows.
+    var sidebarReport: String {
+        var report = "sidebar: \(sidebar.mode) focus: \(sidebar.hasFocus)\n"
+        let tree = sidebar.fileTree
+        report += "file tree: \(tree.root?.path ?? "-")\n"
+        guard sidebar.mode == .files else { return report }
+        let outline = tree.outlineView
+        for row in 0..<outline.numberOfRows {
+            guard let node = outline.item(atRow: row) as? FileNode else { continue }
+            let indent = String(repeating: "  ", count: outline.level(forItem: node))
+            let marker = node.isDirectory ? (outline.isItemExpanded(node) ? "v " : "> ") : "  "
+            let icon = node.isDirectory ? "" : " [\(FileIcons.iconName(for: node.url.lastPathComponent))]"
+            report += " \(outline.selectedRow == row ? "*" : " ")\(indent)\(marker)\(node.name)\(icon)"
+            report += node.isIgnored ? " (ignored)\n" : "\n"
+        }
+        return report
     }
 }
 #endif

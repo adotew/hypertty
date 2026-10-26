@@ -15,7 +15,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     var onClose: ((WorkspaceWindowController) -> Void)?
 
     private let splitViewController = NSSplitViewController()
-    private let sidebar: SidebarViewController
+    let sidebar: SidebarViewController
     private let content: TabContainerViewController
     private let sidebarItem: NSSplitViewItem
     /// The sidebar was revealed by focusTabSidebar and hides again when
@@ -47,7 +47,8 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
 
         super.init(window: window)
         window.delegate = self
-        sidebar.delegate = self
+        sidebar.tabList.delegate = self
+        sidebar.fileTree.delegate = self
 
         // Sidebar and pane gaps share one background, so hide the divider.
         let splitView = ThemedSplitView(dividerColor: .clear)
@@ -120,7 +121,15 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         content.show(tab.view)
         window?.title = tab.title
         sidebar.update(tabs: tabs, selectedIndex: selectedIndex)
+        updateFileTree()
         if focus { focusTerminal() }
+    }
+
+    /// The file tree shows the project of the selected tab's focused pane.
+    /// Panes that don't report a directory (an editor) keep the current one.
+    private func updateFileTree() {
+        guard let pwd = selectedTab?.focused.pwd else { return }
+        sidebar.fileTree.setDirectory(pwd)
     }
 
     /// Asks for confirmation if any of the tabs is running a process.
@@ -247,13 +256,23 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         setSidebarCollapsed(collapse)
     }
 
-    /// Moves keyboard focus into the sidebar, or back to the terminal.
+    /// Moves keyboard focus to the tab list, or back to the terminal.
     @objc func focusTabSidebar(_ sender: Any?) {
-        if sidebar.hasFocus {
+        focusSidebar(.tabs)
+    }
+
+    /// Moves keyboard focus to the file tree, or back to the terminal.
+    @objc func focusFileSidebar(_ sender: Any?) {
+        focusSidebar(.files)
+    }
+
+    private func focusSidebar(_ mode: SidebarViewController.Mode) {
+        if sidebar.hasFocus && sidebar.mode == mode {
             focusTerminal()
             return
         }
         revealSidebar()
+        sidebar.show(mode)
         sidebar.focus()
     }
 
@@ -337,6 +356,7 @@ extension WorkspaceWindowController: TerminalViewDelegate {
         guard let tab = tab(for: terminal) else { return }
         if tab === selectedTab {
             window?.title = tab.title
+            updateFileTree()
         }
         sidebar.refresh(tab: tab)
     }
@@ -346,6 +366,7 @@ extension WorkspaceWindowController: TerminalViewDelegate {
         tab.focusDidChange(to: terminal)
         if tab === selectedTab {
             window?.title = tab.title
+            updateFileTree()
         }
         sidebar.refresh(tab: tab)
     }
@@ -413,29 +434,29 @@ extension WorkspaceWindowController: TerminalViewDelegate {
     }
 }
 
-// MARK: - SidebarDelegate
+// MARK: - TabListDelegate
 
-extension WorkspaceWindowController: SidebarDelegate {
-    func sidebar(_ sidebar: SidebarViewController, didSelectTabAt index: Int, focusTerminal: Bool) {
+extension WorkspaceWindowController: TabListDelegate {
+    func tabList(_ list: TabListViewController, didSelectTabAt index: Int, focusTerminal: Bool) {
         guard tabs.indices.contains(index) else { return }
         select(tabs[index], focus: focusTerminal)
     }
 
-    func sidebarNewTab(_ sidebar: SidebarViewController) {
+    func tabListNewTab(_ list: TabListViewController) {
         addTab()
     }
 
-    func sidebar(_ sidebar: SidebarViewController, closeTabAt index: Int) {
+    func tabList(_ list: TabListViewController, closeTabAt index: Int) {
         guard tabs.indices.contains(index) else { return }
         requestClose([tabs[index]])
     }
 
-    func sidebar(_ sidebar: SidebarViewController, moveTabAt index: Int, by offset: Int) {
+    func tabList(_ list: TabListViewController, moveTabAt index: Int, by offset: Int) {
         guard tabs.indices.contains(index) else { return }
         move(tabs[index], by: offset)
     }
 
-    func sidebar(_ sidebar: SidebarViewController, didRenameTabAt index: Int, to title: String?) {
+    func tabList(_ list: TabListViewController, didRenameTabAt index: Int, to title: String?) {
         if let title, tabs.indices.contains(index) {
             tabs[index].customTitle = title.isEmpty ? nil : title
             if tabs[index] === selectedTab { window?.title = tabs[index].title }
@@ -447,8 +468,51 @@ extension WorkspaceWindowController: SidebarDelegate {
         }
     }
 
-    func sidebarFocusTerminal(_ sidebar: SidebarViewController) {
+    func tabListFocusTerminal(_ list: TabListViewController) {
         focusTerminal()
+    }
+}
+
+// MARK: - FileTreeDelegate
+
+extension WorkspaceWindowController: FileTreeDelegate {
+    /// Opens the file in your editor, in a split right of the focused pane
+    /// or in a new tab, working in the project root.
+    func fileTree(_ tree: FileTreeViewController, open url: URL, inNewTab: Bool) {
+        guard let tab = selectedTab else { return }
+        let context = inNewTab ? GHOSTTY_SURFACE_CONTEXT_TAB : GHOSTTY_SURFACE_CONTEXT_SPLIT
+        var options = SurfaceOptions(inheriting: tab.focused, context: context)
+        options.workingDirectory = (tree.root ?? url.deletingLastPathComponent()).path
+        options.command = EditorCommand.open(url)
+
+        if inNewTab {
+            addTab(options: options)
+        } else if let terminal = makeTerminal(options) {
+            tab.split(tab.focused, adding: terminal, direction: GHOSTTY_SPLIT_DIRECTION_RIGHT)
+            window?.makeFirstResponder(terminal)
+            focusTerminal()
+        }
+    }
+
+    func fileTreeFocusTerminal(_ tree: FileTreeViewController) {
+        focusTerminal()
+    }
+}
+
+/// The command a pane runs to edit a file: `$EDITOR` (nvim if unset),
+/// started from an interactive login shell so it gets your PATH and
+/// environment.
+enum EditorCommand {
+    static func open(_ url: URL) -> String {
+        let shell = getpwuid(getuid()).flatMap { String(validatingCString: $0.pointee.pw_shell) } ?? "/bin/zsh"
+        // eval so an EDITOR with arguments ("code -w") works.
+        let script = #"eval "exec ${EDITOR:-nvim} \"\$1\"""#
+        return [shell, "-l", "-i", "-c", script, "codecave", url.path].map(quoted).joined(separator: " ")
+    }
+
+    /// Single-quotes for /bin/sh.
+    private static func quoted(_ string: String) -> String {
+        "'" + string.replacingOccurrences(of: "'", with: #"'''"#) + "'"
     }
 }
 
