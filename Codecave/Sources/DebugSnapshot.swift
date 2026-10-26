@@ -84,13 +84,19 @@ enum DebugSnapshot {
             NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
             for terminal in workspace.selectedTab?.terminals ?? [] where terminal.window != nil {
                 let rect = terminal.convert(terminal.bounds, to: nil)
+                let pane = terminal.superview?.superview as? PaneView
+                NSGraphicsContext.saveGraphicsState()
+                // Approximates the pane card's rounded bottom corners.
+                NSBezierPath(roundedRect: rect, xRadius: PaneView.cornerRadius - 1,
+                             yRadius: PaneView.cornerRadius - 1).addClip()
                 if let frame = terminalImage(terminal) {
                     NSGraphicsContext.current?.cgContext.draw(frame, in: rect)
                 }
-                if let pane = terminal.superview as? PaneView, pane.dimmed {
+                if let pane, pane.dimmed {
                     pane.dimColor.setFill()
                     rect.fill(using: .sourceOver)
                 }
+                NSGraphicsContext.restoreGraphicsState()
             }
             NSGraphicsContext.restoreGraphicsState()
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path + ".png"))
@@ -112,7 +118,7 @@ enum DebugSnapshot {
                 report += " \(terminal === tab.focused ? "*" : " ") \(Int(frame.minX)),\(Int(frame.minY))"
                 report += " \(Int(frame.width))x\(Int(frame.height)) grid \(size?.columns ?? 0)x\(size?.rows ?? 0)"
                 report += " first responder: \(terminal.window?.firstResponder === terminal)"
-                report += " dimmed: \((terminal.superview as? PaneView)?.dimmed ?? false)\n"
+                report += " dimmed: \((terminal.superview?.superview as? PaneView)?.dimmed ?? false)\n"
             }
             if let surface = tab.focused.surface {
                 report += "---\n" + screenText(surface)

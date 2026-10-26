@@ -143,8 +143,7 @@ final class Tab {
             let container = SplitContainerView(
                 axis: axis, ratio: ratio,
                 first: makeView(first, path: path + [false]),
-                second: makeView(second, path: path + [true]),
-                dividerColor: theme.splitDivider)
+                second: makeView(second, path: path + [true]))
             container.onRatioChange = { [weak self] ratio in
                 guard let self else { return }
                 root = root.setting(ratio: ratio, at: path[...])
@@ -156,7 +155,9 @@ final class Tab {
     private func updateDimming() {
         let split = zoomed == nil && terminals.count > 1
         for terminal in terminals {
-            pane(for: terminal).dimmed = split && terminal !== focused
+            let pane = pane(for: terminal)
+            pane.dimmed = split && terminal !== focused
+            pane.isActive = terminal === focused
         }
     }
 }

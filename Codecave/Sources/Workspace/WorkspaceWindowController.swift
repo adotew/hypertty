@@ -29,7 +29,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         let theme = Theme(runtime: runtime)
         self.theme = theme
         sidebar = SidebarViewController(theme: theme)
-        content = TabContainerViewController(background: theme.background)
+        content = TabContainerViewController(background: theme.chrome)
         sidebarItem = NSSplitViewItem(viewController: sidebar)
 
         let window = NSWindow(
@@ -40,14 +40,15 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         window.tabbingMode = .disallowed
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.backgroundColor = theme.background
+        window.backgroundColor = theme.chrome
         window.minSize = NSSize(width: 480, height: 240)
 
         super.init(window: window)
         window.delegate = self
         sidebar.delegate = self
 
-        let splitView = ThemedSplitView(dividerColor: theme.divider)
+        // Sidebar and pane gaps share one background, so hide the divider.
+        let splitView = ThemedSplitView(dividerColor: theme.chrome)
         splitView.isVertical = true
         splitView.dividerStyle = .thin
         splitViewController.splitView = splitView
@@ -198,15 +199,20 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         }
         if sidebarPeeking {
             sidebarPeeking = false
-            sidebarItem.animator().isCollapsed = true
+            setSidebarCollapsed(true)
         }
     }
 
     private func revealSidebar() {
         if sidebarItem.isCollapsed {
             sidebarPeeking = true
-            sidebarItem.animator().isCollapsed = false
+            setSidebarCollapsed(false)
         }
+    }
+
+    private func setSidebarCollapsed(_ collapsed: Bool) {
+        sidebarItem.animator().isCollapsed = collapsed
+        content.clearsTitlebar = collapsed
     }
 
     // MARK: Menu actions
@@ -236,7 +242,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         sidebarPeeking = false
         let collapse = !sidebarItem.isCollapsed
         if collapse && sidebar.hasFocus { focusTerminal() }
-        sidebarItem.animator().isCollapsed = collapse
+        setSidebarCollapsed(collapse)
     }
 
     /// Moves keyboard focus into the sidebar, or back to the terminal.
@@ -327,6 +333,7 @@ extension WorkspaceWindowController: TerminalViewDelegate {
 
     func terminalDidUpdate(_ terminal: TerminalView) {
         guard let tab = tab(for: terminal) else { return }
+        tab.pane(for: terminal).updateTitle()
         if tab === selectedTab {
             window?.title = tab.title
         }
@@ -446,10 +453,19 @@ extension WorkspaceWindowController: SidebarDelegate {
 
 // MARK: - Views
 
-/// Shows the selected tab's view. Other tabs' views are removed from the
-/// view hierarchy, which pauses their terminals' rendering.
+/// Shows the selected tab's view, inset so pane cards float on the window
+/// background. Other tabs' views are removed from the view hierarchy, which
+/// pauses their terminals' rendering.
 final class TabContainerViewController: NSViewController {
+    static let padding: CGFloat = 8
+
     private var shown: NSView?
+    private var topConstraint: NSLayoutConstraint?
+    /// With the sidebar hidden, the traffic lights sit over the content,
+    /// so the cards start below the titlebar.
+    var clearsTitlebar = false {
+        didSet { updateTopConstraint() }
+    }
     private let background: NSColor
 
     init(background: NSColor) {
@@ -475,13 +491,22 @@ final class TabContainerViewController: NSViewController {
 
         tabView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(tabView)
+        let padding = Self.padding
         NSLayoutConstraint.activate([
-            // Below the transparent titlebar.
-            tabView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            tabView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            tabView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            tabView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tabView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -padding),
+            tabView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: padding),
+            tabView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -padding),
         ])
+        updateTopConstraint()
+    }
+
+    private func updateTopConstraint() {
+        guard let shown else { return }
+        topConstraint?.isActive = false
+        topConstraint = clearsTitlebar
+            ? shown.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)
+            : shown.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.padding)
+        topConstraint?.isActive = true
     }
 }
 

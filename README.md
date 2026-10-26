@@ -15,8 +15,9 @@ work too if you bind them.
 Splits use Ghostty's keybinds too: `⌘D` / `⌘⇧D` split right / down,
 `⌘[` / `⌘]` previous / next split, `⌘⌥←↑↓→` go to split, `⌘⌃←↑↓→`
 resize, `⌘⌃=` equalize, `⌘⇧⏎` zoom, `⌘W` closes the focused split.
-`unfocused-split-opacity`, `unfocused-split-fill` and `split-divider-color`
-are respected. Drag a divider to resize with the mouse.
+Panes are rounded cards separated by gaps; drag a gap to resize.
+`unfocused-split-opacity` and `unfocused-split-fill` dim unfocused panes,
+and `split-divider-color` (if set) colors the card borders.
 
 Codecave adds `⌘B` (toggle sidebar) and `⌘S` (focus sidebar). In the
 focused sidebar:

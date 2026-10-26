@@ -45,7 +45,7 @@ final class SidebarViewController: NSViewController {
     }
 
     override func loadView() {
-        let root = FillView(color: theme.sidebarBackground)
+        let root = FillView(color: theme.chrome)
         root.frame = NSRect(x: 0, y: 0, width: 220, height: 600)
 
         let column = NSTableColumn(identifier: .init("tab"))
