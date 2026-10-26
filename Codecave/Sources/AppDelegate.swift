@@ -3,7 +3,7 @@ import GhosttyKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate {
     private var runtime: GhosttyRuntime!
-    private var windows: [TerminalWindowController] = []
+    private var windows: [WorkspaceWindowController] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         runtime = GhosttyRuntime()
@@ -28,18 +28,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        windows.forEach { $0.terminal.teardown() }
+        windows.forEach { $0.tabs.forEach { $0.terminal.teardown() } }
     }
 
     // MARK: Windows
 
     @objc func newWindow(_ sender: Any?) {
-        let focused = NSApp.keyWindow?.windowController as? TerminalWindowController
-        newWindow(inheriting: focused?.terminal)
+        newWindow(inheriting: keyWorkspace?.selectedTab?.terminal)
+    }
+
+    private var keyWorkspace: WorkspaceWindowController? {
+        (NSApp.keyWindow ?? NSApp.mainWindow)?.windowController as? WorkspaceWindowController
     }
 
     private func newWindow(inheriting parent: TerminalView?) {
-        let controller = TerminalWindowController(
+        let controller = WorkspaceWindowController(
             runtime: runtime,
             options: SurfaceOptions(inheriting: parent, context: GHOSTTY_SURFACE_CONTEXT_WINDOW))
         controller.onClose = { [weak self] closed in
@@ -55,6 +58,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
         newWindow(inheriting: parent)
     }
 
+    func ghosttyNewTab() {
+        if let keyWorkspace {
+            keyWorkspace.addTab()
+        } else {
+            newWindow(inheriting: nil)
+        }
+    }
+
     func ghosttyQuit() {
         NSApp.terminate(nil)
     }
@@ -62,8 +73,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
     // MARK: Menu
 
     /// Most shortcuts are Ghostty keybinds handled by the terminal itself
-    /// (cmd+c/v, cmd+n, cmd+w, cmd+q, cmd+plus/minus, ...). The menu exists
-    /// for discoverability and for when no terminal has focus.
+    /// (cmd+c/v, cmd+t, cmd+n, cmd+w, cmd+1-9, ...), so they follow your
+    /// Ghostty config. The menu mirrors Ghostty's defaults for when the
+    /// terminal doesn't have focus (e.g. the sidebar does), and owns the
+    /// app-level shortcuts: ⌘B toggles the sidebar, ⌘S focuses it.
     private func makeMainMenu() -> NSMenu {
         let main = NSMenu()
 
@@ -76,8 +89,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
         main.addItem(submenu: appMenu, title: "Codecave")
 
         let fileMenu = NSMenu(title: "File")
+        fileMenu.addItem(withTitle: "New Tab", action: #selector(WorkspaceWindowController.newTab(_:)),
+                         keyEquivalent: "t")
         fileMenu.addItem(withTitle: "New Window", action: #selector(newWindow(_:)), keyEquivalent: "n")
-        fileMenu.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        fileMenu.addItem(.separator())
+        fileMenu.addItem(withTitle: "Close Tab", action: #selector(WorkspaceWindowController.closeTab(_:)),
+                         keyEquivalent: "w")
+        fileMenu.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "W")
         main.addItem(submenu: fileMenu, title: "File")
 
         let editMenu = NSMenu(title: "Edit")
@@ -86,11 +104,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
         editMenu.addItem(withTitle: "Select All", action: #selector(TerminalView.selectAll(_:)), keyEquivalent: "a")
         main.addItem(submenu: editMenu, title: "Edit")
 
+        let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(withTitle: "Toggle Sidebar", action: #selector(WorkspaceWindowController.toggleTabSidebar(_:)),
+                         keyEquivalent: "b")
+        viewMenu.addItem(withTitle: "Focus Sidebar", action: #selector(WorkspaceWindowController.focusTabSidebar(_:)),
+                         keyEquivalent: "s")
+        viewMenu.addItem(withTitle: "Rename Tab…", action: #selector(WorkspaceWindowController.renameTab(_:)),
+                         keyEquivalent: "")
+        main.addItem(submenu: viewMenu, title: "View")
+
         let windowMenu = NSMenu(title: "Window")
         windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         windowMenu.addItem(withTitle: "Toggle Full Screen",
                            action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
             .keyEquivalentModifierMask = [.command, .control]
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(withTitle: "Select Next Tab",
+                           action: #selector(WorkspaceWindowController.selectNextTab(_:)), keyEquivalent: "\t")
+            .keyEquivalentModifierMask = [.control]
+        windowMenu.addItem(withTitle: "Select Previous Tab",
+                           action: #selector(WorkspaceWindowController.selectPreviousTab(_:)), keyEquivalent: "")
+        for number in 1...9 {
+            let item = windowMenu.addItem(withTitle: "Select Tab \(number)",
+                                          action: #selector(WorkspaceWindowController.selectTabByNumber(_:)),
+                                          keyEquivalent: "\(number)")
+            item.tag = number
+        }
+        windowMenu.addItem(.separator())
         main.addItem(submenu: windowMenu, title: "Window")
         NSApp.windowsMenu = windowMenu
 

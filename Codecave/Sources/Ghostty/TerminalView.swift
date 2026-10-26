@@ -5,15 +5,39 @@ import GhosttyKit
 struct SurfaceOptions {
     var workingDirectory: String?
     var fontSize: Float = 0
+    var context = GHOSTTY_SURFACE_CONTEXT_WINDOW
 
     init() {}
 
     init(inheriting view: TerminalView?, context: ghostty_surface_context_e) {
+        self.context = context
         guard let surface = view?.surface else { return }
         let inherited = ghostty_surface_inherited_config(surface, context)
         workingDirectory = inherited.working_directory.map { String(cString: $0) }
         fontSize = inherited.font_size
     }
+}
+
+/// Tab-level requests coming from Ghostty keybinds, handled by whatever
+/// hosts the terminal.
+enum TerminalCommand {
+    case newTab
+    case closeTab(ghostty_action_close_tab_mode_e)
+    case gotoTab(ghostty_action_goto_tab_e)
+    case moveTab(Int)
+    case renameTab
+    case focusSidebar
+    case closeWindow
+}
+
+protocol TerminalViewDelegate: AnyObject {
+    /// Title, working directory or bell state changed.
+    func terminalDidUpdate(_ terminal: TerminalView)
+    /// The shell exited or `close_surface` ran. `confirm` is true if a
+    /// process is still running.
+    func terminalDidRequestClose(_ terminal: TerminalView, confirm: Bool)
+    /// Returns false if the command isn't supported.
+    func terminal(_ terminal: TerminalView, perform command: TerminalCommand) -> Bool
 }
 
 /// An NSView hosting a single libghostty surface. libghostty installs its
@@ -25,13 +49,15 @@ struct SurfaceOptions {
 final class TerminalView: NSView {
     private(set) var surface: ghostty_surface_t?
 
-    var title = "" { didSet { onTitleChange?(title) } }
-    var pwd: String?
-    var cellSize: NSSize = .zero
+    weak var delegate: TerminalViewDelegate?
 
-    var onTitleChange: ((String) -> Void)?
-    /// Called when the terminal should go away (shell exited, `close_surface`).
-    var onClose: (() -> Void)?
+    var title = "" { didSet { delegate?.terminalDidUpdate(self) } }
+    var pwd: String? { didSet { delegate?.terminalDidUpdate(self) } }
+    /// Set when the terminal rings the bell, cleared once it has focus.
+    var bell = false {
+        didSet { if bell != oldValue { delegate?.terminalDidUpdate(self) } }
+    }
+    var cellSize: NSSize = .zero
 
     private var focused = false
     private var cursor: NSCursor = .iBeam
@@ -53,7 +79,7 @@ final class TerminalView: NSView {
         config.userdata = Unmanaged.passUnretained(self).toOpaque()
         config.scale_factor = Double(NSScreen.main?.backingScaleFactor ?? 2)
         config.font_size = options.fontSize
-        config.context = GHOSTTY_SURFACE_CONTEXT_WINDOW
+        config.context = options.context
 
         surface = withOptionalCString(options.workingDirectory) { cwd in
             config.working_directory = cwd
@@ -106,18 +132,7 @@ final class TerminalView: NSView {
     }
 
     func requestClose(confirm: Bool) {
-        guard confirm, let window else {
-            onClose?()
-            return
-        }
-        let alert = NSAlert()
-        alert.messageText = "Close this terminal?"
-        alert.informativeText = "A process is still running in this terminal and will be terminated."
-        alert.addButton(withTitle: "Close")
-        alert.addButton(withTitle: "Cancel")
-        alert.beginSheetModal(for: window) { [weak self] response in
-            if response == .alertFirstButtonReturn { self?.onClose?() }
-        }
+        delegate?.terminalDidRequestClose(self, confirm: confirm)
     }
 
     // MARK: Size, scale, display
@@ -154,7 +169,13 @@ final class TerminalView: NSView {
         super.viewDidMoveToWindow()
         windowObservers.forEach(NotificationCenter.default.removeObserver)
         windowObservers = []
-        guard let window else { return }
+
+        // Hidden tabs are removed from the window: stop drawing them.
+        guard let window else {
+            if let surface { ghostty_surface_set_occlusion(surface, false) }
+            setFocused(false)
+            return
+        }
 
         let center = NotificationCenter.default
         windowObservers.append(center.addObserver(
@@ -203,6 +224,7 @@ final class TerminalView: NSView {
         guard focused != value, let surface else { return }
         focused = value
         ghostty_surface_set_focus(surface, value)
+        if value { bell = false }
     }
 
     // MARK: Cursor

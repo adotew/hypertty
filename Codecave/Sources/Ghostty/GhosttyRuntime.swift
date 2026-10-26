@@ -4,6 +4,8 @@ import GhosttyKit
 protocol GhosttyRuntimeDelegate: AnyObject {
     /// Ghostty asked for a new window, e.g. via the `new_window` keybind.
     func ghosttyNewWindow(inheriting parent: TerminalView?)
+    /// Ghostty asked for a new tab without a focused terminal to put it next to.
+    func ghosttyNewTab()
     /// Ghostty asked to quit the app, e.g. via the `quit` keybind.
     func ghosttyQuit()
 }
@@ -75,10 +77,18 @@ final class GhosttyRuntime {
         guard let config else { return nil }
         var color = ghostty_config_color_s()
         guard ghostty_config_get(config, &color, key, UInt(key.utf8.count)) else { return nil }
-        return NSColor(srgbRed: CGFloat(color.r) / 255,
-                       green: CGFloat(color.g) / 255,
-                       blue: CGFloat(color.b) / 255,
-                       alpha: 1)
+        return NSColor(ghostty: color)
+    }
+
+    /// One of the 256 palette colors after applying the theme.
+    func paletteColor(_ index: Int) -> NSColor? {
+        guard let config, (0..<256).contains(index) else { return nil }
+        var palette = ghostty_config_palette_s()
+        let key = "palette"
+        guard ghostty_config_get(config, &palette, key, UInt(key.utf8.count)) else { return nil }
+        return withUnsafeBytes(of: &palette.colors) { raw in
+            NSColor(ghostty: raw.bindMemory(to: ghostty_config_color_s.self)[index])
+        }
     }
 
     // MARK: Config
@@ -162,6 +172,11 @@ final class GhosttyRuntime {
         let surface: ghostty_surface_t? = target.tag == GHOSTTY_TARGET_SURFACE ? target.target.surface : nil
         let view = surface.flatMap(TerminalView.from(surface:))
 
+        func host(_ command: TerminalCommand) -> Bool {
+            guard let view, let delegate = view.delegate else { return false }
+            return delegate.terminal(view, perform: command)
+        }
+
         switch action.tag {
         case GHOSTTY_ACTION_QUIT:
             runtime.delegate?.ghosttyQuit()
@@ -169,8 +184,30 @@ final class GhosttyRuntime {
         case GHOSTTY_ACTION_NEW_WINDOW:
             runtime.delegate?.ghosttyNewWindow(inheriting: view)
 
+        case GHOSTTY_ACTION_NEW_TAB:
+            if view == nil {
+                runtime.delegate?.ghosttyNewTab()
+                return true
+            }
+            return host(.newTab)
+
+        case GHOSTTY_ACTION_CLOSE_TAB:
+            return host(.closeTab(action.action.close_tab_mode))
+
+        case GHOSTTY_ACTION_GOTO_TAB:
+            return host(.gotoTab(action.action.goto_tab))
+
+        case GHOSTTY_ACTION_MOVE_TAB:
+            return host(.moveTab(Int(action.action.move_tab.amount)))
+
+        case GHOSTTY_ACTION_PROMPT_TITLE:
+            return host(.renameTab)
+
+        case GHOSTTY_ACTION_TOGGLE_TAB_OVERVIEW:
+            return host(.focusSidebar)
+
         case GHOSTTY_ACTION_CLOSE_WINDOW:
-            view?.window?.performClose(nil)
+            return host(.closeWindow)
 
         case GHOSTTY_ACTION_TOGGLE_FULLSCREEN:
             view?.window?.toggleFullScreen(nil)
@@ -216,14 +253,15 @@ final class GhosttyRuntime {
             runtime.reloadConfig(surface: surface, soft: action.action.reload_config.soft)
 
         case GHOSTTY_ACTION_RING_BELL:
-            NSApp.requestUserAttention(.informationalRequest)
+            view?.bell = true
+            if !NSApp.isActive { NSApp.requestUserAttention(.informationalRequest) }
 
         case GHOSTTY_ACTION_CONFIG_CHANGE, GHOSTTY_ACTION_COLOR_CHANGE, GHOSTTY_ACTION_RENDER:
             // Informational; nothing to do for a single-surface window.
             break
 
         default:
-            // Tabs, splits, quick terminal, inspector, etc. come in later milestones.
+            // Splits, quick terminal, inspector, etc. come in later milestones.
             return false
         }
 
@@ -312,6 +350,15 @@ final class GhosttyRuntime {
     private static func closeSurface(_ userdata: UnsafeMutableRawPointer?, processAlive: Bool) {
         guard let view = TerminalView.from(userdata: userdata) else { return }
         DispatchQueue.main.async { view.requestClose(confirm: processAlive) }
+    }
+}
+
+extension NSColor {
+    convenience init(ghostty color: ghostty_config_color_s) {
+        self.init(srgbRed: CGFloat(color.r) / 255,
+                  green: CGFloat(color.g) / 255,
+                  blue: CGFloat(color.b) / 255,
+                  alpha: 1)
     }
 }
 

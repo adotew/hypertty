@@ -2,8 +2,32 @@
 
 A keyboard-driven terminal workspace for macOS, built on libghostty.
 
-Currently: one Ghostty terminal per window, using your Ghostty config
+Currently: Ghostty terminals in vertical tabs, using your Ghostty config
 (`~/.config/ghostty/config`), themes, shaders and keybinds.
+
+## Keys
+
+Tab shortcuts are your Ghostty keybinds (defaults shown): `⌘T` new tab,
+`⌘W` close, `⌘1`–`⌘8` go to tab, `⌘9` last tab, `⌃Tab` / `⌘⇧]` next,
+`⌃⇧Tab` / `⌘⇧[` previous. `move_tab` and `prompt_tab_title`
+work too if you bind them.
+
+Codecave adds `⌘B` (toggle sidebar) and `⌘S` (focus sidebar). In the
+focused sidebar:
+
+| key | action |
+|---|---|
+| `j` / `k` | next / previous tab |
+| `g` / `G` | first / last tab |
+| `1`–`9` | go to tab and focus it |
+| `J` / `K` | move tab down / up |
+| `n` | new tab |
+| `x` | close tab |
+| `r` | rename (empty resets to the shell title) |
+| `l`, `⏎`, `esc` | back to the terminal |
+
+`⌘S` with the sidebar hidden peeks it open; it hides again when you return
+to the terminal.
 
 ## Build
 
@@ -25,6 +49,7 @@ make run       # generates the Xcode project, builds and opens the app
   Zig-produced archive members.
 - `Codecave/Sources/Ghostty`: the libghostty embedding (runtime callbacks,
   the terminal NSView and its keyboard/IME/mouse handling).
+- `Codecave/Sources/Workspace`: windows, tabs and the sidebar.
 
 ## Debug snapshot
 
@@ -33,6 +58,7 @@ for checking rendering without screen-recording permission:
 
 ```sh
 open -n -W --env CODECAVE_SNAPSHOT=/tmp/shot --env 'CODECAVE_SNAPSHOT_INPUT=ls' \
+  --env 'CODECAVE_SNAPSHOT_ACTIONS=new_tab;@focusTabSidebar:;key:k' \
   build/Build/Products/Debug/Codecave.app
-# -> /tmp/shot.png, /tmp/shot.txt
+# -> /tmp/shot.png, /tmp/shot.txt (see DebugSnapshot.swift for step syntax)
 ```
