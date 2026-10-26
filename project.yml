@@ -1,0 +1,48 @@
+# XcodeGen spec. Regenerate the project with `make project`.
+name: Codecave
+options:
+  bundleIdPrefix: dev.codecave
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: YES
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGN_STYLE: Manual
+    ENABLE_HARDENED_RUNTIME: NO
+
+targets:
+  Codecave:
+    type: application
+    platform: macOS
+    sources:
+      - path: Codecave/Sources
+      # libghostty locates its themes, shell integration and terminfo by
+      # looking for Contents/Resources/terminfo/78/xterm-ghostty in the bundle.
+      - path: vendor/ghostty/zig-out/share/ghostty
+        type: folder
+        buildPhase: resources
+      - path: vendor/ghostty/zig-out/share/terminfo
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - framework: vendor/ghostty/macos/GhosttyKit.xcframework
+        embed: false
+      - sdk: Carbon.framework
+    info:
+      path: Codecave/Info.plist
+      properties:
+        CFBundleDisplayName: Codecave
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSApplicationCategoryType: public.app-category.developer-tools
+        NSPrincipalClass: NSApplication
+        NSHighResolutionCapable: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.codecave.Codecave
+        OTHER_LDFLAGS: ["-lc++"]

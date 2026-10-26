@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""libtool shim used while building GhosttyKit.
+
+Zig writes static archives whose members aren't 8-byte aligned, and the
+libtool shipped with Xcode 27 silently drops such members when merging
+archives ("64-bit mach-o not 8-byte aligned"), producing a libghostty
+that is missing most of its code. This shim unpacks every input archive
+into loose object files and hands those to the real libtool instead.
+
+Only `libtool -static -o OUT IN...` (what Ghostty's LibtoolStep runs)
+is rewritten; any other invocation goes straight to /usr/bin/libtool.
+"""
+
+import os
+import sys
+import tempfile
+
+REAL_LIBTOOL = "/usr/bin/libtool"
+MACHO_MAGICS = (b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe")
+
+
+def members(path):
+    """Yield (name, bytes) for each member of a BSD or GNU ar archive."""
+    with open(path, "rb") as f:
+        data = f.read()
+    if not data.startswith(b"!<arch>\n"):
+        raise SystemExit(f"libtool shim: {path} is not an ar archive")
+
+    gnu_names = b""
+    pos = 8
+    while pos + 60 <= len(data):
+        header = data[pos : pos + 60]
+        pos += 60
+        name = header[0:16].decode().rstrip()
+        size = int(header[48:58].decode().strip())
+        body = data[pos : pos + size]
+        pos += size + (size & 1)
+
+        if name.startswith("#1/"):  # BSD long name stored before the body
+            n = int(name[3:])
+            name, body = body[:n].rstrip(b"\0").decode(), body[n:]
+        elif name == "//":  # GNU long-name table
+            gnu_names = body
+            continue
+        elif name.startswith("/") and name[1:].isdigit():
+            start = int(name[1:])
+            name = gnu_names[start : gnu_names.index(b"/\n", start)].decode()
+        else:
+            name = name.rstrip("/")
+
+        if name.startswith("__.SYMDEF") or name == "":
+            continue
+        yield name, body
+
+
+def main(argv):
+    if len(argv) < 4 or argv[0] != "-static" or argv[1] != "-o":
+        os.execv(REAL_LIBTOOL, [REAL_LIBTOOL, *argv])
+
+    out, inputs = argv[2], argv[3:]
+    with tempfile.TemporaryDirectory(prefix="libtool-shim-") as tmp:
+        objects = []
+        for i, path in enumerate(inputs):
+            if not path.endswith(".a"):
+                objects.append(path)
+                continue
+            for j, (name, body) in enumerate(members(path)):
+                if body[:4] not in MACHO_MAGICS:
+                    continue
+                # Prefix keeps duplicate member names (common) distinct.
+                obj = os.path.join(tmp, f"{i}_{j}_{os.path.basename(name)}")
+                with open(obj, "wb") as f:
+                    f.write(body)
+                objects.append(obj)
+
+        filelist = os.path.join(tmp, "objects.txt")
+        with open(filelist, "w") as f:
+            f.write("\n".join(objects))
+
+        cmd = [REAL_LIBTOOL, "-static", "-no_warning_for_no_symbols",
+               "-o", out, "-filelist", filelist]
+        if os.spawnv(os.P_WAIT, REAL_LIBTOOL, cmd) != 0:
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
