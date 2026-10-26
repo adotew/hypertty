@@ -1,19 +1,37 @@
 import AppKit
+import GhosttyKit
 
-/// One entry in the sidebar. For now a tab holds a single terminal;
-/// splits and browser panes come later.
+/// One entry in the sidebar: a tree of split terminals. `view` hosts the
+/// tree and is what the window shows when the tab is selected.
 final class Tab {
-    let terminal: TerminalView
+    let view = NSView()
+    private(set) var root: SplitNode
+    /// The pane that has (or last had) keyboard focus.
+    private(set) var focused: TerminalView
+    /// Set by `toggle_split_zoom`: only this pane is shown.
+    private(set) var zoomed: TerminalView?
     /// Set by renaming the tab; overrides the title the shell reports.
     var customTitle: String?
 
-    init(terminal: TerminalView) {
-        self.terminal = terminal
+    private let theme: Theme
+    private var panes: [ObjectIdentifier: PaneView] = [:]
+
+    init(terminal: TerminalView, theme: Theme) {
+        root = .leaf(terminal)
+        focused = terminal
+        self.theme = theme
+        rebuild()
     }
+
+    var terminals: [TerminalView] { root.leaves }
+
+    var needsConfirmQuit: Bool { terminals.contains { $0.needsConfirmQuit } }
+
+    // MARK: Sidebar
 
     var title: String {
         if let customTitle { return customTitle }
-        if !terminal.title.isEmpty { return terminal.title }
+        if !focused.title.isEmpty { return focused.title }
         return directory ?? "Terminal"
     }
 
@@ -23,10 +41,122 @@ final class Tab {
         return directory
     }
 
-    var hasBell: Bool { terminal.bell }
+    var hasBell: Bool { terminals.contains { $0.bell } }
+
+    var paneCount: Int { terminals.count }
 
     private var directory: String? {
-        guard let pwd = terminal.pwd else { return nil }
+        guard let pwd = focused.pwd else { return nil }
         return (pwd as NSString).abbreviatingWithTildeInPath
+    }
+
+    // MARK: Splits
+
+    func split(_ target: TerminalView, adding terminal: TerminalView,
+               direction: ghostty_action_split_direction_e) {
+        zoomed = nil
+        root = root.inserting(terminal, at: target, direction: direction)
+        rebuild()
+    }
+
+    /// Removes a pane and returns the one to focus next, or nil if it was
+    /// the last pane.
+    func remove(_ terminal: TerminalView) -> TerminalView? {
+        // Focus moves to the previous pane, like Ghostty.
+        let next = root.target(from: terminal, GHOSTTY_GOTO_SPLIT_PREVIOUS)
+        guard let newRoot = root.removing(terminal) else { return nil }
+        root = newRoot
+        panes[ObjectIdentifier(terminal)] = nil
+        if zoomed === terminal { zoomed = nil }
+        if focused === terminal, let next { focused = next }
+        rebuild()
+        return next
+    }
+
+    func target(from terminal: TerminalView, _ direction: ghostty_action_goto_split_e) -> TerminalView? {
+        root.target(from: terminal, direction)
+    }
+
+    func resize(_ terminal: TerminalView, _ resize: ghostty_action_resize_split_s) {
+        zoomed = nil
+        root = root.resizing(terminal, direction: resize.direction,
+                             amount: CGFloat(resize.amount), in: view.bounds.size)
+        rebuild()
+    }
+
+    func equalize() {
+        root = root.equalized()
+        rebuild()
+    }
+
+    func toggleZoom() {
+        guard terminals.count > 1 else { return }
+        zoomed = zoomed == nil ? focused : nil
+        rebuild()
+    }
+
+    func unzoom() {
+        guard zoomed != nil else { return }
+        zoomed = nil
+        rebuild()
+    }
+
+    /// Records which pane has focus and dims the others.
+    func focusDidChange(to terminal: TerminalView) {
+        guard root.contains(terminal) else { return }
+        focused = terminal
+        updateDimming()
+    }
+
+    // MARK: Views
+
+    func pane(for terminal: TerminalView) -> PaneView {
+        if let pane = panes[ObjectIdentifier(terminal)] { return pane }
+        let pane = PaneView(terminal: terminal, theme: theme)
+        panes[ObjectIdentifier(terminal)] = pane
+        return pane
+    }
+
+    /// Recreates the view hierarchy from the tree. Terminals are reparented,
+    /// not recreated, so their shells keep running.
+    private func rebuild() {
+        let hadFocus = focused.window?.firstResponder === focused
+        view.subviews.forEach { $0.removeFromSuperview() }
+
+        let content = zoomed.map { pane(for: $0) } ?? makeView(root, path: [])
+        content.frame = view.bounds
+        content.autoresizingMask = [.width, .height]
+        view.addSubview(content)
+        updateDimming()
+
+        // Reparenting drops first responder; give it back.
+        if hadFocus {
+            focused.window?.makeFirstResponder(focused)
+        }
+    }
+
+    private func makeView(_ node: SplitNode, path: [Bool]) -> NSView {
+        switch node {
+        case .leaf(let terminal):
+            return pane(for: terminal)
+        case .split(let axis, let ratio, let first, let second):
+            let container = SplitContainerView(
+                axis: axis, ratio: ratio,
+                first: makeView(first, path: path + [false]),
+                second: makeView(second, path: path + [true]),
+                dividerColor: theme.splitDivider)
+            container.onRatioChange = { [weak self] ratio in
+                guard let self else { return }
+                root = root.setting(ratio: ratio, at: path[...])
+            }
+            return container
+        }
+    }
+
+    private func updateDimming() {
+        let split = zoomed == nil && terminals.count > 1
+        for terminal in terminals {
+            pane(for: terminal).dimmed = split && terminal !== focused
+        }
     }
 }

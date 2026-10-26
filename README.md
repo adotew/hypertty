@@ -2,8 +2,8 @@
 
 A keyboard-driven terminal workspace for macOS, built on libghostty.
 
-Currently: Ghostty terminals in vertical tabs, using your Ghostty config
-(`~/.config/ghostty/config`), themes, shaders and keybinds.
+Currently: Ghostty terminals in vertical tabs and splits, using your
+Ghostty config (`~/.config/ghostty/config`), themes, shaders and keybinds.
 
 ## Keys
 
@@ -11,6 +11,12 @@ Tab shortcuts are your Ghostty keybinds (defaults shown): `⌘T` new tab,
 `⌘W` close, `⌘1`–`⌘8` go to tab, `⌘9` last tab, `⌃Tab` / `⌘⇧]` next,
 `⌃⇧Tab` / `⌘⇧[` previous. `move_tab` and `prompt_tab_title`
 work too if you bind them.
+
+Splits use Ghostty's keybinds too: `⌘D` / `⌘⇧D` split right / down,
+`⌘[` / `⌘]` previous / next split, `⌘⌥←↑↓→` go to split, `⌘⌃←↑↓→`
+resize, `⌘⌃=` equalize, `⌘⇧⏎` zoom, `⌘W` closes the focused split.
+`unfocused-split-opacity`, `unfocused-split-fill` and `split-divider-color`
+are respected. Drag a divider to resize with the mouse.
 
 Codecave adds `⌘B` (toggle sidebar) and `⌘S` (focus sidebar). In the
 focused sidebar:
@@ -49,7 +55,7 @@ make run       # generates the Xcode project, builds and opens the app
   Zig-produced archive members.
 - `Codecave/Sources/Ghostty`: the libghostty embedding (runtime callbacks,
   the terminal NSView and its keyboard/IME/mouse handling).
-- `Codecave/Sources/Workspace`: windows, tabs and the sidebar.
+- `Codecave/Sources/Workspace`: windows, tabs, splits and the sidebar.
 
 ## Debug snapshot
 

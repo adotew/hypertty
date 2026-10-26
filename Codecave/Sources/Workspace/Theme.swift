@@ -7,11 +7,21 @@ struct Theme {
     let foreground: NSColor
     /// Palette color 4 (blue), used to mark the focused sidebar.
     let accent: NSColor
+    /// Drawn over unfocused split panes.
+    let unfocusedSplitFill: NSColor
+    let splitDivider: NSColor
 
     init(runtime: GhosttyRuntime) {
         background = runtime.configColor("background") ?? .black
         foreground = runtime.configColor("foreground") ?? .white
         accent = runtime.paletteColor(4) ?? .controlAccentColor
+
+        // Same defaults and clamping as Ghostty.
+        let opacity = min(1, max(0.15, runtime.configDouble("unfocused-split-opacity") ?? 0.7))
+        unfocusedSplitFill = (runtime.configColor("unfocused-split-fill") ?? background)
+            .withAlphaComponent(1 - opacity)
+        splitDivider = runtime.configColor("split-divider-color")
+            ?? background.blended(withFraction: 0.25, of: foreground) ?? foreground
     }
 
     var sidebarBackground: NSColor { background.blended(withFraction: 0.2, of: .black) ?? background }

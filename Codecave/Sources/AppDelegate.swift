@@ -28,13 +28,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        windows.forEach { $0.tabs.forEach { $0.terminal.teardown() } }
+        windows.forEach { $0.tabs.forEach { $0.terminals.forEach { $0.teardown() } } }
     }
 
     // MARK: Windows
 
     @objc func newWindow(_ sender: Any?) {
-        newWindow(inheriting: keyWorkspace?.selectedTab?.terminal)
+        newWindow(inheriting: keyWorkspace?.selectedTab?.focused)
     }
 
     private var keyWorkspace: WorkspaceWindowController? {
@@ -111,6 +111,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
                          keyEquivalent: "s")
         viewMenu.addItem(withTitle: "Rename Tab…", action: #selector(WorkspaceWindowController.renameTab(_:)),
                          keyEquivalent: "")
+        viewMenu.addItem(.separator())
+        viewMenu.addItem(withTitle: "Split Right", action: #selector(WorkspaceWindowController.splitRight(_:)),
+                         keyEquivalent: "d")
+        viewMenu.addItem(withTitle: "Split Down", action: #selector(WorkspaceWindowController.splitDown(_:)),
+                         keyEquivalent: "D")
+        viewMenu.addItem(withTitle: "Zoom Split", action: #selector(WorkspaceWindowController.toggleSplitZoom(_:)),
+                         keyEquivalent: "\r")
+            .keyEquivalentModifierMask = [.command, .shift]
+        viewMenu.addItem(withTitle: "Equalize Splits",
+                         action: #selector(WorkspaceWindowController.equalizeSplits(_:)), keyEquivalent: "=")
+            .keyEquivalentModifierMask = [.command, .control]
         main.addItem(submenu: viewMenu, title: "View")
 
         let windowMenu = NSMenu(title: "Window")

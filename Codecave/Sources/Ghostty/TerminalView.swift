@@ -28,11 +28,18 @@ enum TerminalCommand {
     case renameTab
     case focusSidebar
     case closeWindow
+    case newSplit(ghostty_action_split_direction_e)
+    case gotoSplit(ghostty_action_goto_split_e)
+    case resizeSplit(ghostty_action_resize_split_s)
+    case equalizeSplits
+    case toggleSplitZoom
 }
 
 protocol TerminalViewDelegate: AnyObject {
     /// Title, working directory or bell state changed.
     func terminalDidUpdate(_ terminal: TerminalView)
+    /// The terminal became first responder (e.g. clicked or navigated to).
+    func terminalDidFocus(_ terminal: TerminalView)
     /// The shell exited or `close_surface` ran. `confirm` is true if a
     /// process is still running.
     func terminalDidRequestClose(_ terminal: TerminalView, confirm: Bool)
@@ -60,6 +67,7 @@ final class TerminalView: NSView {
     var cellSize: NSSize = .zero
 
     private var focused = false
+    private var suppressNextLeftMouseUp = false
     private var cursor: NSCursor = .iBeam
     private var windowObservers: [NSObjectProtocol] = []
 
@@ -224,7 +232,10 @@ final class TerminalView: NSView {
         guard focused != value, let surface else { return }
         focused = value
         ghostty_surface_set_focus(surface, value)
-        if value { bell = false }
+        if value {
+            bell = false
+            delegate?.terminalDidFocus(self)
+        }
     }
 
     // MARK: Cursor
@@ -285,11 +296,20 @@ final class TerminalView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        if window?.firstResponder !== self { window?.makeFirstResponder(self) }
+        // Like Ghostty, a click that focuses a pane isn't sent to the program.
+        if window?.firstResponder !== self {
+            window?.makeFirstResponder(self)
+            suppressNextLeftMouseUp = true
+            return
+        }
         sendMouseButton(event, GHOSTTY_MOUSE_PRESS)
     }
 
     override func mouseUp(with event: NSEvent) {
+        if suppressNextLeftMouseUp {
+            suppressNextLeftMouseUp = false
+            return
+        }
         sendMouseButton(event, GHOSTTY_MOUSE_RELEASE)
         if let surface { ghostty_surface_mouse_pressure(surface, 0, 0) }
     }

@@ -1,20 +1,22 @@
 import AppKit
 import GhosttyKit
 
-/// A window with a vertical tab sidebar and one terminal per tab.
+/// A window with a vertical tab sidebar; each tab holds split terminals.
 ///
-/// Tab shortcuts are Ghostty keybinds (new_tab, goto_tab, next_tab,
-/// move_tab, close_tab, ...), so they follow your Ghostty config. The menu
-/// items mirror Ghostty's defaults for when the sidebar has focus.
+/// Tab and split shortcuts are Ghostty keybinds (new_tab, goto_tab,
+/// new_split, goto_split, resize_split, ...), so they follow your Ghostty
+/// config. The menu items mirror Ghostty's defaults for when the sidebar
+/// has focus.
 final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     private let runtime: GhosttyRuntime
+    private let theme: Theme
     private(set) var tabs: [Tab] = []
     private(set) var selectedTab: Tab?
     var onClose: ((WorkspaceWindowController) -> Void)?
 
     private let splitViewController = NSSplitViewController()
     private let sidebar: SidebarViewController
-    private let content: TerminalContainerViewController
+    private let content: TabContainerViewController
     private let sidebarItem: NSSplitViewItem
     /// The sidebar was revealed by focusTabSidebar and hides again when
     /// focus returns to the terminal.
@@ -25,8 +27,9 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     init(runtime: GhosttyRuntime, options: SurfaceOptions = .init()) {
         self.runtime = runtime
         let theme = Theme(runtime: runtime)
+        self.theme = theme
         sidebar = SidebarViewController(theme: theme)
-        content = TerminalContainerViewController(background: theme.background)
+        content = TabContainerViewController(background: theme.background)
         sidebarItem = NSSplitViewItem(viewController: sidebar)
 
         let window = NSWindow(
@@ -91,14 +94,19 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         return tabs.firstIndex { $0 === selectedTab }
     }
 
+    private func makeTerminal(_ options: SurfaceOptions) -> TerminalView? {
+        guard let app = runtime.app else { return nil }
+        let terminal = TerminalView(app: app, options: options)
+        terminal.delegate = self
+        return terminal
+    }
+
     /// Adds a tab after the selected one, inheriting its working directory.
     @discardableResult
     func addTab(options: SurfaceOptions? = nil) -> Tab? {
-        guard let app = runtime.app else { return nil }
-        let options = options ?? SurfaceOptions(inheriting: selectedTab?.terminal, context: GHOSTTY_SURFACE_CONTEXT_TAB)
-        let terminal = TerminalView(app: app, options: options)
-        terminal.delegate = self
-        let tab = Tab(terminal: terminal)
+        let options = options ?? SurfaceOptions(inheriting: selectedTab?.focused, context: GHOSTTY_SURFACE_CONTEXT_TAB)
+        guard let terminal = makeTerminal(options) else { return nil }
+        let tab = Tab(terminal: terminal, theme: theme)
         tabs.insert(tab, at: selectedIndex.map { $0 + 1 } ?? tabs.count)
         select(tab)
         return tab
@@ -106,7 +114,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
 
     func select(_ tab: Tab, focus: Bool = true) {
         selectedTab = tab
-        content.show(tab.terminal)
+        content.show(tab.view)
         window?.title = tab.title
         sidebar.update(tabs: tabs, selectedIndex: selectedIndex)
         if focus { focusTerminal() }
@@ -115,7 +123,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     /// Asks for confirmation if any of the tabs is running a process.
     func requestClose(_ tabsToClose: [Tab], confirm: Bool? = nil) {
         guard !tabsToClose.isEmpty else { return }
-        let needsConfirm = confirm ?? tabsToClose.contains { $0.terminal.needsConfirmQuit }
+        let needsConfirm = confirm ?? tabsToClose.contains { $0.needsConfirmQuit }
         guard needsConfirm else {
             tabsToClose.forEach(close)
             return
@@ -130,8 +138,8 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     private func close(_ tab: Tab) {
         guard let index = tabs.firstIndex(where: { $0 === tab }) else { return }
         let sidebarHadFocus = sidebar.hasFocus
-        tab.terminal.teardown()
-        tab.terminal.removeFromSuperview()
+        tab.terminals.forEach { $0.teardown() }
+        tab.view.removeFromSuperview()
         tabs.remove(at: index)
 
         guard !tabs.isEmpty else {
@@ -185,7 +193,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     // MARK: Focus
 
     func focusTerminal() {
-        if let terminal = selectedTab?.terminal {
+        if let terminal = selectedTab?.focused {
             window?.makeFirstResponder(terminal)
         }
         if sidebarPeeking {
@@ -241,6 +249,25 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         sidebar.focus()
     }
 
+    // Split menu items act on the selected tab's focused pane, e.g. while
+    // the sidebar has focus. In the terminal, Ghostty's keybinds run first.
+
+    @objc func splitRight(_ sender: Any?) {
+        if let terminal = selectedTab?.focused { _ = perform(.newSplit(GHOSTTY_SPLIT_DIRECTION_RIGHT), from: terminal) }
+    }
+
+    @objc func splitDown(_ sender: Any?) {
+        if let terminal = selectedTab?.focused { _ = perform(.newSplit(GHOSTTY_SPLIT_DIRECTION_DOWN), from: terminal) }
+    }
+
+    @objc func toggleSplitZoom(_ sender: Any?) {
+        if let terminal = selectedTab?.focused { _ = perform(.toggleSplitZoom, from: terminal) }
+    }
+
+    @objc func equalizeSplits(_ sender: Any?) {
+        if let terminal = selectedTab?.focused { _ = perform(.equalizeSplits, from: terminal) }
+    }
+
     @objc func renameTab(_ sender: Any?) {
         guard let index = selectedIndex else { return }
         renameReturnsToTerminal = !sidebar.hasFocus
@@ -251,20 +278,20 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     // MARK: NSWindowDelegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard tabs.contains(where: { $0.terminal.needsConfirmQuit }) else { return true }
+        guard tabs.contains(where: { $0.needsConfirmQuit }) else { return true }
         confirmClose(message: "Close this window?") { [weak self] in self?.window?.close() }
         return false
     }
 
     func windowWillClose(_ notification: Notification) {
-        tabs.forEach { $0.terminal.teardown() }
+        tabs.forEach { $0.terminals.forEach { $0.teardown() } }
         tabs = []
         onClose?(self)
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
         // Clear a bell on the visible tab once the user is looking at it.
-        selectedTab?.terminal.bell = false
+        selectedTab?.focused.bell = false
     }
 }
 
@@ -272,7 +299,30 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
 
 extension WorkspaceWindowController: TerminalViewDelegate {
     private func tab(for terminal: TerminalView) -> Tab? {
-        tabs.first { $0.terminal === terminal }
+        tabs.first { $0.root.contains(terminal) }
+    }
+
+    /// Closes one pane; closing the last pane closes the tab.
+    private func closePane(_ terminal: TerminalView, in tab: Tab, confirm: Bool) {
+        guard tab.paneCount > 1 else {
+            requestClose([tab], confirm: confirm)
+            return
+        }
+        let close = { [weak self] in
+            guard let self else { return }
+            let wasFocused = tab.focused === terminal
+            terminal.teardown()
+            let next = tab.remove(terminal)
+            if wasFocused, tab === selectedTab, !sidebar.hasFocus, let next {
+                window?.makeFirstResponder(next)
+            }
+            sidebar.refresh(tab: tab)
+        }
+        if confirm {
+            confirmClose(message: "Close this split?", onConfirm: close)
+        } else {
+            close()
+        }
     }
 
     func terminalDidUpdate(_ terminal: TerminalView) {
@@ -283,12 +333,25 @@ extension WorkspaceWindowController: TerminalViewDelegate {
         sidebar.refresh(tab: tab)
     }
 
+    func terminalDidFocus(_ terminal: TerminalView) {
+        guard let tab = tab(for: terminal) else { return }
+        tab.focusDidChange(to: terminal)
+        if tab === selectedTab {
+            window?.title = tab.title
+        }
+        sidebar.refresh(tab: tab)
+    }
+
     func terminalDidRequestClose(_ terminal: TerminalView, confirm: Bool) {
         guard let tab = tab(for: terminal) else { return }
-        requestClose([tab], confirm: confirm)
+        closePane(terminal, in: tab, confirm: confirm)
     }
 
     func terminal(_ terminal: TerminalView, perform command: TerminalCommand) -> Bool {
+        perform(command, from: terminal)
+    }
+
+    private func perform(_ command: TerminalCommand, from terminal: TerminalView) -> Bool {
         guard let tab = tab(for: terminal), let index = tabs.firstIndex(where: { $0 === tab }) else { return false }
 
         switch command {
@@ -316,6 +379,27 @@ extension WorkspaceWindowController: TerminalViewDelegate {
 
         case .closeWindow:
             window?.performClose(nil)
+
+        case .newSplit(let direction):
+            let options = SurfaceOptions(inheriting: terminal, context: GHOSTTY_SURFACE_CONTEXT_SPLIT)
+            guard let newTerminal = makeTerminal(options) else { return false }
+            tab.split(terminal, adding: newTerminal, direction: direction)
+            window?.makeFirstResponder(newTerminal)
+
+        case .gotoSplit(let direction):
+            guard let target = tab.target(from: terminal, direction) else { return false }
+            tab.unzoom()
+            window?.makeFirstResponder(target)
+
+        case .resizeSplit(let resize):
+            tab.resize(terminal, resize)
+
+        case .equalizeSplits:
+            tab.equalize()
+
+        case .toggleSplitZoom:
+            tab.toggleZoom()
+            window?.makeFirstResponder(tab.focused)
         }
         return true
     }
@@ -362,10 +446,10 @@ extension WorkspaceWindowController: SidebarDelegate {
 
 // MARK: - Views
 
-/// Shows the selected tab's terminal. Other tabs' terminals are removed
-/// from the view hierarchy, which pauses their rendering.
-final class TerminalContainerViewController: NSViewController {
-    private(set) var terminal: TerminalView?
+/// Shows the selected tab's view. Other tabs' views are removed from the
+/// view hierarchy, which pauses their terminals' rendering.
+final class TabContainerViewController: NSViewController {
+    private var shown: NSView?
     private let background: NSColor
 
     init(background: NSColor) {
@@ -384,19 +468,19 @@ final class TerminalContainerViewController: NSViewController {
         self.view = view
     }
 
-    func show(_ terminal: TerminalView) {
-        guard terminal !== self.terminal else { return }
-        self.terminal?.removeFromSuperview()
-        self.terminal = terminal
+    func show(_ tabView: NSView) {
+        guard tabView !== shown else { return }
+        shown?.removeFromSuperview()
+        shown = tabView
 
-        terminal.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(terminal)
+        tabView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(tabView)
         NSLayoutConstraint.activate([
             // Below the transparent titlebar.
-            terminal.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            terminal.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            terminal.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            terminal.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            tabView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            tabView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            tabView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            tabView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
     }
 }

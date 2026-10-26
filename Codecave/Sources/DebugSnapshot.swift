@@ -36,7 +36,7 @@ enum DebugSnapshot {
     private static func run(_ steps: ArraySlice<String>, in workspace: WorkspaceWindowController,
                             then done: @escaping () -> Void) {
         guard let step = steps.first else { return done() }
-        let terminal = workspace.selectedTab?.terminal
+        let terminal = workspace.selectedTab?.focused
 
         if step.hasPrefix("input:"), let surface = terminal?.surface {
             // Text arrives like a paste; Return is a real key press so the shell runs it.
@@ -76,16 +76,23 @@ enum DebugSnapshot {
     private static func write(_ workspace: WorkspaceWindowController, to path: String) {
         guard let window = workspace.window, let contentView = window.contentView else { return }
 
-        // AppKit views first, then the terminal's Metal-rendered frame on top.
+        // AppKit views first, then each visible pane's Metal-rendered frame
+        // and its unfocused-split dimming on top.
         if let rep = contentView.bitmapImageRepForCachingDisplay(in: contentView.bounds) {
             contentView.cacheDisplay(in: contentView.bounds, to: rep)
-            if let terminal = workspace.selectedTab?.terminal, let frame = terminalImage(terminal) {
-                NSGraphicsContext.saveGraphicsState()
-                NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            for terminal in workspace.selectedTab?.terminals ?? [] where terminal.window != nil {
                 let rect = terminal.convert(terminal.bounds, to: nil)
-                NSGraphicsContext.current?.cgContext.draw(frame, in: rect)
-                NSGraphicsContext.restoreGraphicsState()
+                if let frame = terminalImage(terminal) {
+                    NSGraphicsContext.current?.cgContext.draw(frame, in: rect)
+                }
+                if let pane = terminal.superview as? PaneView, pane.dimmed {
+                    pane.dimColor.setFill()
+                    rect.fill(using: .sourceOver)
+                }
             }
+            NSGraphicsContext.restoreGraphicsState()
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path + ".png"))
         }
 
@@ -94,10 +101,22 @@ enum DebugSnapshot {
         report += "tabs:\n"
         for (i, tab) in workspace.tabs.enumerated() {
             let marker = tab === workspace.selectedTab ? "*" : " "
-            report += " \(marker)\(i + 1) \(tab.title) | \(tab.subtitle ?? "") \(tab.hasBell ? "(bell)" : "")\n"
+            report += " \(marker)\(i + 1) \(tab.title) | \(tab.subtitle ?? "") \(tab.hasBell ? "(bell)" : "")"
+            report += " panes: \(tab.paneCount)\(tab.zoomed != nil ? " (zoomed)" : "")\n"
         }
-        if let surface = workspace.selectedTab?.terminal.surface {
-            report += "---\n" + screenText(surface)
+        if let tab = workspace.selectedTab {
+            report += "panes of selected tab (window points):\n"
+            for terminal in tab.terminals {
+                let frame = terminal.window != nil ? terminal.convert(terminal.bounds, to: nil) : .zero
+                let size = terminal.surface.map(ghostty_surface_size)
+                report += " \(terminal === tab.focused ? "*" : " ") \(Int(frame.minX)),\(Int(frame.minY))"
+                report += " \(Int(frame.width))x\(Int(frame.height)) grid \(size?.columns ?? 0)x\(size?.rows ?? 0)"
+                report += " first responder: \(terminal.window?.firstResponder === terminal)"
+                report += " dimmed: \((terminal.superview as? PaneView)?.dimmed ?? false)\n"
+            }
+            if let surface = tab.focused.surface {
+                report += "---\n" + screenText(surface)
+            }
         }
         try? report.write(toFile: path + ".txt", atomically: true, encoding: .utf8)
     }

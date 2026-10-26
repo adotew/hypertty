@@ -80,6 +80,13 @@ final class GhosttyRuntime {
         return NSColor(ghostty: color)
     }
 
+    func configDouble(_ key: String) -> Double? {
+        guard let config else { return nil }
+        var value = 0.0
+        guard ghostty_config_get(config, &value, key, UInt(key.utf8.count)) else { return nil }
+        return value
+    }
+
     /// One of the 256 palette colors after applying the theme.
     func paletteColor(_ index: Int) -> NSColor? {
         guard let config, (0..<256).contains(index) else { return nil }
@@ -209,6 +216,21 @@ final class GhosttyRuntime {
         case GHOSTTY_ACTION_CLOSE_WINDOW:
             return host(.closeWindow)
 
+        case GHOSTTY_ACTION_NEW_SPLIT:
+            return host(.newSplit(action.action.new_split))
+
+        case GHOSTTY_ACTION_GOTO_SPLIT:
+            return host(.gotoSplit(action.action.goto_split))
+
+        case GHOSTTY_ACTION_RESIZE_SPLIT:
+            return host(.resizeSplit(action.action.resize_split))
+
+        case GHOSTTY_ACTION_EQUALIZE_SPLITS:
+            return host(.equalizeSplits)
+
+        case GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
+            return host(.toggleSplitZoom)
+
         case GHOSTTY_ACTION_TOGGLE_FULLSCREEN:
             view?.window?.toggleFullScreen(nil)
 
@@ -261,7 +283,7 @@ final class GhosttyRuntime {
             break
 
         default:
-            // Splits, quick terminal, inspector, etc. come in later milestones.
+            // Quick terminal, inspector, etc. aren't supported yet.
             return false
         }
 
