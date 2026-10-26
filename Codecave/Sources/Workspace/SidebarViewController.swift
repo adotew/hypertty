@@ -15,8 +15,10 @@ final class SidebarViewController: NSViewController {
     private let filesButton: ModeButton
     private let rootLabel = NSTextField(labelWithString: "")
 
-    /// Room for the window's traffic lights above the header.
-    private static let topInset: CGFloat = 40
+    /// Puts the header in the titlebar, right of the traffic lights
+    /// (14pt buttons 9pt from the top, the last ending at x = 69).
+    private static let topInset: CGFloat = 4
+    private static let leadingInset: CGFloat = 78
 
     init(theme: Theme) {
         self.theme = theme
@@ -61,7 +63,7 @@ final class SidebarViewController: NSViewController {
         addChild(fileTree)
         var constraints = [
             header.topAnchor.constraint(equalTo: root.topAnchor, constant: Self.topInset),
-            header.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 8),
+            header.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: Self.leadingInset),
             header.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -12),
             header.heightAnchor.constraint(equalToConstant: 24),
         ]

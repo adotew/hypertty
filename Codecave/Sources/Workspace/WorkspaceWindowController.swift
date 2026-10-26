@@ -57,7 +57,8 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         splitViewController.splitView = splitView
 
         sidebarItem.canCollapse = true
-        sidebarItem.minimumThickness = 150
+        // Fits the traffic lights and the Tabs / Files header.
+        sidebarItem.minimumThickness = 200
         sidebarItem.maximumThickness = 420
         // Window resizes go to the terminal, not the sidebar.
         sidebarItem.holdingPriority = NSLayoutConstraint.Priority(260)
