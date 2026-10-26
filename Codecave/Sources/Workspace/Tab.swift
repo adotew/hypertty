@@ -4,7 +4,10 @@ import GhosttyKit
 /// One entry in the sidebar: a tree of split terminals. `view` hosts the
 /// tree and is what the window shows when the tab is selected.
 final class Tab {
-    let view = NSView()
+    /// Renders the panes' glass together; spacing 0 keeps separate cards
+    /// from merging.
+    let view = NSGlassEffectContainerView()
+    private let content = NSView()
     private(set) var root: SplitNode
     /// The pane that has (or last had) keyboard focus.
     private(set) var focused: TerminalView
@@ -20,6 +23,8 @@ final class Tab {
         root = .leaf(terminal)
         focused = terminal
         self.theme = theme
+        view.spacing = 0
+        view.contentView = content
         rebuild()
     }
 
@@ -121,12 +126,12 @@ final class Tab {
     /// not recreated, so their shells keep running.
     private func rebuild() {
         let hadFocus = focused.window?.firstResponder === focused
-        view.subviews.forEach { $0.removeFromSuperview() }
+        content.subviews.forEach { $0.removeFromSuperview() }
 
-        let content = zoomed.map { pane(for: $0) } ?? makeView(root, path: [])
-        content.frame = view.bounds
-        content.autoresizingMask = [.width, .height]
-        view.addSubview(content)
+        let tree = zoomed.map { pane(for: $0) } ?? makeView(root, path: [])
+        tree.frame = content.bounds
+        tree.autoresizingMask = [.width, .height]
+        content.addSubview(tree)
         updateDimming()
 
         // Reparenting drops first responder; give it back.
@@ -157,7 +162,6 @@ final class Tab {
         for terminal in terminals {
             let pane = pane(for: terminal)
             pane.dimmed = split && terminal !== focused
-            pane.isActive = terminal === focused
         }
     }
 }

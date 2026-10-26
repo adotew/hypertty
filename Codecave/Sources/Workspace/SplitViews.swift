@@ -1,127 +1,67 @@
 import AppKit
 
-/// A pane drawn as a rounded card: a header (icon and title) above the
-/// terminal. Unfocused panes are dimmed per Ghostty's
-/// `unfocused-split-opacity` / `unfocused-split-fill`.
+/// A pane drawn as a Liquid Glass card with the terminal inset inside it.
+/// The card is filled with the terminal background so the two are one
+/// color; the glass provides the edge. Unfocused panes are dimmed per
+/// Ghostty's `unfocused-split-opacity` / `unfocused-split-fill`.
 final class PaneView: NSView {
-    static let cornerRadius: CGFloat = 10
-    static let headerHeight: CGFloat = 30
+    static let cornerRadius: CGFloat = 12
+    /// Terminal inset from the card's edges, on top of Ghostty's own
+    /// window-padding.
+    static let contentInset: CGFloat = 9
 
     let terminal: TerminalView
-    private let theme: Theme
-    private let terminalClip = NSView()
+    private let glass = NSGlassEffectView()
+    private let card: CardContent
     private let overlay: DimOverlay
-    private let iconView = NSImageView()
-    private let titleField = NSTextField(labelWithString: "")
 
-    /// Dims the terminal (unfocused pane in a split tab).
+    /// Dims the card (unfocused pane in a split tab).
     var dimmed = false {
         didSet { overlay.isHidden = !dimmed }
-    }
-
-    /// The tab's focused pane: brighter border and title.
-    var isActive = false {
-        didSet { if isActive != oldValue { updateChrome() } }
     }
 
     var dimColor: NSColor { overlay.color }
 
     init(terminal: TerminalView, theme: Theme) {
         self.terminal = terminal
-        self.theme = theme
-        overlay = DimOverlay(color: theme.unfocusedSplitFill)
+        card = CardContent(color: theme.background, radius: Self.cornerRadius)
+        overlay = DimOverlay(color: theme.unfocusedSplitFill, cornerRadius: Self.cornerRadius)
         super.init(frame: .zero)
-        wantsLayer = true
 
-        // Terminal area, clipped to the card's rounded bottom corners.
-        terminalClip.wantsLayer = true
-        terminalClip.layer?.cornerRadius = Self.cornerRadius - 1
-        terminalClip.layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-        terminalClip.layer?.masksToBounds = true
-        addSubview(terminalClip)
+        glass.cornerRadius = Self.cornerRadius
+        glass.tintColor = theme.background
+        glass.contentView = card
+        addSubview(glass)
 
         // Sized in layout().
         terminal.translatesAutoresizingMaskIntoConstraints = true
         terminal.autoresizingMask = []
-        terminalClip.addSubview(terminal)
-        overlay.isHidden = true
-        terminalClip.addSubview(overlay)
+        card.addSubview(terminal)
 
-        setUpHeader()
-        updateTitle()
-        updateChrome()
+        overlay.isHidden = true
+        addSubview(overlay)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
     }
 
-    private func setUpHeader() {
-        iconView.image = NSImage(systemSymbolName: "terminal", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 11, weight: .semibold))
-        iconView.contentTintColor = theme.secondaryText
-
-        titleField.font = .systemFont(ofSize: 12.5, weight: .semibold)
-        titleField.lineBreakMode = .byTruncatingTail
-        titleField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        titleField.setContentHuggingPriority(.init(1), for: .horizontal)
-
-        let header = NSStackView(views: [iconView, titleField])
-        header.orientation = .horizontal
-        header.alignment = .centerY
-        header.spacing = 7
-        header.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(header)
-        NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: topAnchor),
-            header.heightAnchor.constraint(equalToConstant: Self.headerHeight),
-            header.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            header.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-        ])
-    }
-
-    func updateTitle() {
-        if !terminal.title.isEmpty {
-            titleField.stringValue = terminal.title
-        } else if let pwd = terminal.pwd {
-            titleField.stringValue = (pwd as NSString).abbreviatingWithTildeInPath
-        } else {
-            titleField.stringValue = "Terminal"
-        }
-    }
-
-    private func updateChrome() {
-        titleField.textColor = isActive ? theme.foreground : theme.secondaryText
-        needsDisplay = true
-    }
-
-    // MARK: Layout and drawing
+    // MARK: Layout
 
     override var isFlipped: Bool { true }
 
     override func layout() {
         super.layout()
-        // Inset by the 1pt border so the terminal doesn't cover it.
-        terminalClip.frame = NSRect(x: 1, y: Self.headerHeight,
-                                    width: max(0, bounds.width - 2),
-                                    height: max(0, bounds.height - Self.headerHeight - 1))
-        terminal.frame = terminalClip.bounds
-        overlay.frame = terminalClip.bounds
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
-                                xRadius: Self.cornerRadius, yRadius: Self.cornerRadius)
-        theme.background.setFill()
-        path.fill()
-        (isActive ? theme.paneBorderActive : theme.paneBorder).setStroke()
-        path.lineWidth = 1
-        path.stroke()
+        glass.frame = bounds
+        card.frame = glass.bounds
+        overlay.frame = bounds
+        let inset = Self.contentInset
+        terminal.frame = card.bounds.insetBy(dx: inset, dy: inset)
     }
 
     // MARK: Mouse
 
-    /// Clicking the header focuses the pane.
+    /// Clicking the card's margin focuses the pane.
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(terminal)
     }
@@ -129,15 +69,43 @@ final class PaneView: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
 }
 
+/// The glass's content: a rounded, solid fill behind the terminal.
+private final class CardContent: NSView {
+    private let color: NSColor
+    private let radius: CGFloat
+
+    init(color: NSColor, radius: CGFloat) {
+        self.color = color
+        self.radius = radius
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        color.setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        superview?.mouseDown(with: event)
+    }
+}
+
 /// A translucent layer above the terminal's Metal layer that ignores the mouse.
 private final class DimOverlay: NSView {
     let color: NSColor
 
-    init(color: NSColor) {
+    init(color: NSColor, cornerRadius: CGFloat) {
         self.color = color
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = color.cgColor
+        layer?.cornerRadius = cornerRadius
     }
 
     required init?(coder: NSCoder) {

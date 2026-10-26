@@ -3,7 +3,7 @@ name: Codecave
 options:
   bundleIdPrefix: dev.codecave
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "26.0"
   createIntermediateGroups: true
 
 settings:

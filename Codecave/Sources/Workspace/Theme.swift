@@ -9,9 +9,6 @@ struct Theme {
     let accent: NSColor
     /// Drawn over unfocused split panes.
     let unfocusedSplitFill: NSColor
-    /// Pane card outline. Ghostty's `split-divider-color` if set, since
-    /// panes are separated by gaps rather than divider lines.
-    let paneBorder: NSColor
 
     init(runtime: GhosttyRuntime) {
         background = runtime.configColor("background") ?? .black
@@ -22,12 +19,10 @@ struct Theme {
         let opacity = min(1, max(0.15, runtime.configDouble("unfocused-split-opacity") ?? 0.7))
         unfocusedSplitFill = (runtime.configColor("unfocused-split-fill") ?? background)
             .withAlphaComponent(1 - opacity)
-        paneBorder = runtime.configColor("split-divider-color") ?? foreground.withAlphaComponent(0.08)
     }
 
-    /// Behind the sidebar and between pane cards.
-    var chrome: NSColor { background.blended(withFraction: 0.2, of: .black) ?? background }
-    var paneBorderActive: NSColor { paneBorder.withAlphaComponent(min(1, paneBorder.alphaComponent * 2.2)) }
+    /// Behind the sidebar and pane cards. Always opaque.
+    var chrome: NSColor { background.blended(withFraction: 0.32, of: .black) ?? background }
     var selection: NSColor { foreground.withAlphaComponent(0.1) }
     var secondaryText: NSColor { foreground.withAlphaComponent(0.5) }
 }

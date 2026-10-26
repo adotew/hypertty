@@ -15,9 +15,10 @@ work too if you bind them.
 Splits use Ghostty's keybinds too: `⌘D` / `⌘⇧D` split right / down,
 `⌘[` / `⌘]` previous / next split, `⌘⌥←↑↓→` go to split, `⌘⌃←↑↓→`
 resize, `⌘⌃=` equalize, `⌘⇧⏎` zoom, `⌘W` closes the focused split.
-Panes are rounded cards separated by gaps; drag a gap to resize.
-`unfocused-split-opacity` and `unfocused-split-fill` dim unfocused panes,
-and `split-divider-color` (if set) colors the card borders.
+Panes are Liquid Glass cards (AppKit's `NSGlassEffectView`) on a solid
+background, separated by gaps; drag a gap to resize. Each card is filled
+with your terminal `background`. `unfocused-split-opacity` and
+`unfocused-split-fill` dim unfocused panes.
 
 Codecave adds `⌘B` (toggle sidebar) and `⌘S` (focus sidebar). In the
 focused sidebar:
@@ -38,7 +39,7 @@ to the terminal.
 
 ## Build
 
-Requirements: Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen),
+Requirements: macOS 26+, Xcode, [XcodeGen](https://github.com/yonaskolb/XcodeGen),
 and the Zig version Ghostty pins (`brew install zig@0.15` for Ghostty v1.3.1).
 
 ```sh
@@ -69,3 +70,6 @@ open -n -W --env CODECAVE_SNAPSHOT=/tmp/shot --env 'CODECAVE_SNAPSHOT_INPUT=ls' 
   build/Build/Products/Debug/Codecave.app
 # -> /tmp/shot.png, /tmp/shot.txt (see DebugSnapshot.swift for step syntax)
 ```
+
+To try Ghostty settings without editing your config, debug builds load
+`CODECAVE_EXTRA_CONFIG=/path/to/file` on top of it.

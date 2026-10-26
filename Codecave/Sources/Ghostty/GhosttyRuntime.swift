@@ -106,6 +106,12 @@ final class GhosttyRuntime {
     private static func loadConfig() -> ghostty_config_t? {
         guard let config = ghostty_config_new() else { return nil }
         ghostty_config_load_default_files(config)
+        #if DEBUG
+        // Lets tests try settings without touching the user's config.
+        if let extra = ProcessInfo.processInfo.environment["CODECAVE_EXTRA_CONFIG"] {
+            ghostty_config_load_file(config, extra)
+        }
+        #endif
         ghostty_config_load_recursive_files(config)
         ghostty_config_finalize(config)
 

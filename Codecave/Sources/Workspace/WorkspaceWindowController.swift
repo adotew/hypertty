@@ -29,7 +29,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         let theme = Theme(runtime: runtime)
         self.theme = theme
         sidebar = SidebarViewController(theme: theme)
-        content = TabContainerViewController(background: theme.chrome)
+        content = TabContainerViewController()
         sidebarItem = NSSplitViewItem(viewController: sidebar)
 
         let window = NSWindow(
@@ -40,6 +40,8 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         window.tabbingMode = .disallowed
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
+        // The only thing that paints the background; the sidebar and pane
+        // container are transparent on top of it.
         window.backgroundColor = theme.chrome
         window.minSize = NSSize(width: 480, height: 240)
 
@@ -48,7 +50,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         sidebar.delegate = self
 
         // Sidebar and pane gaps share one background, so hide the divider.
-        let splitView = ThemedSplitView(dividerColor: theme.chrome)
+        let splitView = ThemedSplitView(dividerColor: .clear)
         splitView.isVertical = true
         splitView.dividerStyle = .thin
         splitViewController.splitView = splitView
@@ -333,7 +335,6 @@ extension WorkspaceWindowController: TerminalViewDelegate {
 
     func terminalDidUpdate(_ terminal: TerminalView) {
         guard let tab = tab(for: terminal) else { return }
-        tab.pane(for: terminal).updateTitle()
         if tab === selectedTab {
             window?.title = tab.title
         }
@@ -466,22 +467,8 @@ final class TabContainerViewController: NSViewController {
     var clearsTitlebar = false {
         didSet { updateTopConstraint() }
     }
-    private let background: NSColor
-
-    init(background: NSColor) {
-        self.background = background
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not supported")
-    }
-
     override func loadView() {
-        // Fills the strip under the transparent titlebar.
-        let view = FillView(color: background)
-        view.frame = NSRect(x: 0, y: 0, width: 800, height: 600)
-        self.view = view
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
     }
 
     func show(_ tabView: NSView) {

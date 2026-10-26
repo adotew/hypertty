@@ -78,25 +78,26 @@ enum DebugSnapshot {
 
         // AppKit views first, then each visible pane's Metal-rendered frame
         // and its unfocused-split dimming on top.
-        if let rep = contentView.bitmapImageRepForCachingDisplay(in: contentView.bounds) {
-            contentView.cacheDisplay(in: contentView.bounds, to: rep)
+        if let views = contentView.bitmapImageRepForCachingDisplay(in: contentView.bounds),
+           let rep = contentView.bitmapImageRepForCachingDisplay(in: contentView.bounds) {
+            contentView.cacheDisplay(in: contentView.bounds, to: views)
             NSGraphicsContext.saveGraphicsState()
             NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            // The window background shows through the transparent views.
+            window.backgroundColor.setFill()
+            contentView.bounds.fill()
+            views.draw(in: contentView.bounds, from: .zero, operation: .sourceOver, fraction: 1,
+                       respectFlipped: false, hints: nil)
             for terminal in workspace.selectedTab?.terminals ?? [] where terminal.window != nil {
                 let rect = terminal.convert(terminal.bounds, to: nil)
-                let pane = terminal.superview?.superview as? PaneView
-                NSGraphicsContext.saveGraphicsState()
-                // Approximates the pane card's rounded bottom corners.
-                NSBezierPath(roundedRect: rect, xRadius: PaneView.cornerRadius - 1,
-                             yRadius: PaneView.cornerRadius - 1).addClip()
                 if let frame = terminalImage(terminal) {
                     NSGraphicsContext.current?.cgContext.draw(frame, in: rect)
                 }
-                if let pane, pane.dimmed {
+                if let pane = enclosingPane(terminal), pane.dimmed {
                     pane.dimColor.setFill()
-                    rect.fill(using: .sourceOver)
+                    NSBezierPath(roundedRect: pane.convert(pane.bounds, to: nil),
+                                 xRadius: PaneView.cornerRadius, yRadius: PaneView.cornerRadius).fill()
                 }
-                NSGraphicsContext.restoreGraphicsState()
             }
             NSGraphicsContext.restoreGraphicsState()
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path + ".png"))
@@ -118,13 +119,17 @@ enum DebugSnapshot {
                 report += " \(terminal === tab.focused ? "*" : " ") \(Int(frame.minX)),\(Int(frame.minY))"
                 report += " \(Int(frame.width))x\(Int(frame.height)) grid \(size?.columns ?? 0)x\(size?.rows ?? 0)"
                 report += " first responder: \(terminal.window?.firstResponder === terminal)"
-                report += " dimmed: \((terminal.superview?.superview as? PaneView)?.dimmed ?? false)\n"
+                report += " dimmed: \(enclosingPane(terminal)?.dimmed ?? false)\n"
             }
             if let surface = tab.focused.surface {
                 report += "---\n" + screenText(surface)
             }
         }
         try? report.write(toFile: path + ".txt", atomically: true, encoding: .utf8)
+    }
+
+    private static func enclosingPane(_ terminal: TerminalView) -> PaneView? {
+        sequence(first: terminal.superview, next: { $0?.superview }).lazy.compactMap { $0 as? PaneView }.first
     }
 
     private static func terminalImage(_ terminal: TerminalView) -> CGImage? {
