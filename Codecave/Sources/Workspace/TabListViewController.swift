@@ -235,12 +235,13 @@ extension TabListViewController: NSTextFieldDelegate {
 
 final class TabCellView: NSTableCellView {
     let titleField = NSTextField(labelWithString: "")
-    private let icon = NSImageView()
+    private let icon: IconTileView
     private let bellDot = FillView(color: .clear)
     private let theme: Theme
 
     init(theme: Theme) {
         self.theme = theme
+        icon = IconTileView(theme: theme)
         super.init(frame: .zero)
         textField = titleField
 
@@ -249,10 +250,6 @@ final class TabCellView: NSTableCellView {
         titleField.lineBreakMode = .byTruncatingTail
         titleField.cell?.truncatesLastVisibleLine = true
         titleField.focusRingType = .none
-
-        // Tints symbols; favicons keep their colors.
-        icon.contentTintColor = theme.secondaryText
-        icon.imageScaling = .scaleProportionallyUpOrDown
 
         bellDot.color = theme.accent
         bellDot.wantsLayer = true
@@ -268,15 +265,15 @@ final class TabCellView: NSTableCellView {
         row.distribution = .fill
         row.alignment = .centerY
         row.spacing = 6
-        row.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 8)
+        row.edgeInsets = NSEdgeInsets(top: 0, left: 6, bottom: 0, right: 8)
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
         NSLayoutConstraint.activate([
             row.leadingAnchor.constraint(equalTo: leadingAnchor),
             row.trailingAnchor.constraint(equalTo: trailingAnchor),
             row.centerYAnchor.constraint(equalTo: centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: 16),
-            icon.heightAnchor.constraint(equalToConstant: 16),
+            icon.widthAnchor.constraint(equalToConstant: 22),
+            icon.heightAnchor.constraint(equalToConstant: 22),
             bellDot.widthAnchor.constraint(equalToConstant: 6),
             bellDot.heightAnchor.constraint(equalToConstant: 6),
         ])
@@ -296,5 +293,83 @@ final class TabCellView: NSTableCellView {
         titleField.stringValue = tab.title
         icon.image = tab.icon
         bellDot.isHidden = !tab.hasBell || selected
+    }
+}
+
+/// An app-icon-like tile: a rounded, softly lit square with a drop shadow
+/// and the image on top. Drawn (not layer-styled) so it shows up in
+/// DebugSnapshot's captures.
+final class IconTileView: NSView {
+    var image: NSImage? {
+        didSet { needsDisplay = true }
+    }
+
+    private let theme: Theme
+
+    init(theme: Theme) {
+        self.theme = theme
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        // Room for the shadow, which falls downward.
+        let tile = NSRect(x: 1, y: 1.5, width: bounds.width - 2, height: bounds.height - 2)
+        let path = NSBezierPath(roundedRect: tile, xRadius: 5, yRadius: 5)
+        let base = theme.background
+        let (top, bottom) = theme.isDark
+            ? (base.blended(withFraction: 0.1, of: .white), base.blended(withFraction: 0.15, of: .black))
+            : (NSColor.white, base.blended(withFraction: 0.08, of: .black))
+
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = .black.withAlphaComponent(theme.isDark ? 0.5 : 0.2)
+        shadow.shadowOffset = NSSize(width: 0, height: -0.5)
+        shadow.shadowBlurRadius = 1.5
+        shadow.set()
+        (bottom ?? base).setFill()
+        path.fill()
+        NSGraphicsContext.restoreGraphicsState()
+
+        NSGradient(starting: bottom ?? base, ending: top ?? base)?.draw(in: path, angle: 90)
+        // A thin light edge along the top only, fading out down the sides,
+        // like light falling on a macOS app icon.
+        let edge = NSBezierPath(roundedRect: tile.insetBy(dx: 0.25, dy: 0.25), xRadius: 4.75, yRadius: 4.75)
+        if let context = NSGraphicsContext.current?.cgContext {
+            context.saveGState()
+            context.addPath(edge.cgPath)
+            context.setLineWidth(0.5)
+            context.replacePathWithStrokedPath()
+            context.clip()
+            let light = NSColor.white.withAlphaComponent(theme.isDark ? 0.35 : 0.8)
+            NSGradient(colorsAndLocations: (.clear, 0.6), (light, 1))?.draw(in: tile, angle: 90)
+            context.restoreGState()
+        }
+
+        guard let image else { return }
+        let glyph = fitted(image.size, in: tile.insetBy(dx: 4, dy: 4))
+        if image.isTemplate {
+            // Symbols and single-color logos take the text color.
+            let tinted = NSImage(size: glyph.size, flipped: false) { rect in
+                image.draw(in: rect)
+                self.theme.foreground.set()
+                rect.fill(using: .sourceAtop)
+                return true
+            }
+            tinted.draw(in: glyph)
+        } else {
+            image.draw(in: glyph)
+        }
+    }
+
+    /// The largest rect with `size`'s aspect ratio, centered in `rect`.
+    private func fitted(_ size: NSSize, in rect: NSRect) -> NSRect {
+        guard size.width > 0, size.height > 0 else { return rect }
+        let scale = min(rect.width / size.width, rect.height / size.height)
+        let width = size.width * scale, height = size.height * scale
+        return NSRect(x: rect.midX - width / 2, y: rect.midY - height / 2, width: width, height: height)
     }
 }

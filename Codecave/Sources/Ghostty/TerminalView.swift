@@ -138,7 +138,18 @@ final class TerminalView: NSView, Pane {
     /// The running program's icon, else a terminal.
     var tabIcon: NSImage { AppIcons.image(forTitle: title) ?? Self.icon }
 
-    private static let icon = NSImage(systemSymbolName: "apple.terminal", accessibilityDescription: "Terminal") ?? NSImage()
+    /// ">_", drawn like a shell prompt.
+    private static let icon: NSImage = {
+        let prompt = NSAttributedString(string: ">_", attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: 12, weight: .bold),
+        ])
+        let image = NSImage(size: prompt.size(), flipped: false) { _ in
+            prompt.draw(at: .zero)
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }()
 
     var needsConfirmQuit: Bool {
         guard let surface else { return false }
