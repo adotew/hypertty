@@ -55,7 +55,7 @@ enum AppIcons {
     private static let colors: [String: Int] = [
         "vim": 0x019733, "claude": 0xD97757, "git": 0xF03C2E,
         "npm": 0xCB3837, "nodedotjs": 0x5FA04E, "swift": 0xF05138, "xcode": 0x147EFB,
-        "python": 0x3776AB, "uv": 0xDE5FE9, "zig": 0xF7A41D, "apachemaven": 0xC71A36,
+        "python": 0xFFD43B, "uv": 0xDE5FE9, "zig": 0xF7A41D, "apachemaven": 0xC71A36,
         "flutter": 0x02569B, "tmux": 0x1BB91F, "htop": 0x009020,
     ]
 }
