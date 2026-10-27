@@ -13,7 +13,7 @@ final class Tab {
     private(set) var focused: TerminalView
     /// Set by `toggle_split_zoom`: only this pane is shown.
     private(set) var zoomed: TerminalView?
-    /// Set by renaming the tab; overrides the title the shell reports.
+    /// Set by renaming the tab; overrides the folder name.
     var customTitle: String?
 
     private let theme: Theme
@@ -34,26 +34,16 @@ final class Tab {
 
     // MARK: Sidebar
 
+    /// The focused pane's folder name.
     var title: String {
         if let customTitle { return customTitle }
-        if !focused.title.isEmpty { return focused.title }
-        return directory ?? "Terminal"
-    }
-
-    /// The working directory, shown under the title unless it's the same.
-    var subtitle: String? {
-        guard let directory, directory != title else { return nil }
-        return directory
+        guard let pwd = focused.pwd else { return "Terminal" }
+        return pwd == NSHomeDirectory() ? "~" : (pwd as NSString).lastPathComponent
     }
 
     var hasBell: Bool { terminals.contains { $0.bell } }
 
     var paneCount: Int { terminals.count }
-
-    private var directory: String? {
-        guard let pwd = focused.pwd else { return nil }
-        return (pwd as NSString).abbreviatingWithTildeInPath
-    }
 
     // MARK: Splits
 

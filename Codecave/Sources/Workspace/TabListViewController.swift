@@ -5,7 +5,7 @@ protocol TabListDelegate: AnyObject {
     func tabListNewTab(_ list: TabListViewController)
     func tabList(_ list: TabListViewController, closeTabAt index: Int)
     func tabList(_ list: TabListViewController, moveTabAt index: Int, by offset: Int)
-    /// `title` is nil if renaming was cancelled, empty to reset to the shell's title.
+    /// `title` is nil if renaming was cancelled, empty to reset to the folder name.
     func tabList(_ list: TabListViewController, didRenameTabAt index: Int, to title: String?)
     func tabListFocusTerminal(_ list: TabListViewController)
 }
@@ -51,7 +51,7 @@ final class TabListViewController: NSViewController {
         tableView.headerView = nil
         tableView.style = .plain
         tableView.backgroundColor = .clear
-        tableView.rowHeight = 40
+        tableView.rowHeight = 28
         tableView.intercellSpacing = NSSize(width: 0, height: 2)
         tableView.columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         tableView.focusRingType = .none
@@ -184,7 +184,7 @@ extension TabListViewController: NSTableViewDataSource, NSTableViewDelegate {
             cell.identifier = id
             return cell
         }()
-        cell.configure(tab: tabs[row], index: row, selected: tableView.selectedRow == row)
+        cell.configure(tab: tabs[row], selected: tableView.selectedRow == row)
         return cell
     }
 
@@ -235,8 +235,6 @@ extension TabListViewController: NSTextFieldDelegate {
 
 final class TabCellView: NSTableCellView {
     let titleField = NSTextField(labelWithString: "")
-    private let subtitleField = NSTextField(labelWithString: "")
-    private let shortcutField = NSTextField(labelWithString: "")
     private let bellDot = FillView(color: .clear)
     private let theme: Theme
 
@@ -251,35 +249,16 @@ final class TabCellView: NSTableCellView {
         titleField.cell?.truncatesLastVisibleLine = true
         titleField.focusRingType = .none
 
-        subtitleField.font = .systemFont(ofSize: 10.5)
-        subtitleField.textColor = theme.secondaryText
-        subtitleField.lineBreakMode = .byTruncatingHead
-
-        shortcutField.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
-        shortcutField.textColor = theme.secondaryText
-
         bellDot.color = theme.accent
         bellDot.wantsLayer = true
         bellDot.layer?.cornerRadius = 3
         bellDot.layer?.masksToBounds = true
 
-        for field in [titleField, subtitleField] {
-            field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            field.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        }
+        // The title takes all spare width so the bell dot sits at the right edge.
+        titleField.setContentHuggingPriority(.init(1), for: .horizontal)
+        titleField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let text = NSStackView(views: [titleField, subtitleField])
-        text.orientation = .vertical
-        text.alignment = .leading
-        text.spacing = 1
-
-        // The title block takes all spare width so the shortcut sits at the right edge.
-        text.setContentHuggingPriority(.init(1), for: .horizontal)
-        text.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        shortcutField.setContentHuggingPriority(.required, for: .horizontal)
-        shortcutField.setContentCompressionResistancePriority(.required, for: .horizontal)
-
-        let row = NSStackView(views: [text, bellDot, shortcutField])
+        let row = NSStackView(views: [titleField, bellDot])
         row.orientation = .horizontal
         row.distribution = .fill
         row.alignment = .centerY
@@ -306,11 +285,8 @@ final class TabCellView: NSTableCellView {
         set {}
     }
 
-    func configure(tab: Tab, index: Int, selected: Bool) {
+    func configure(tab: Tab, selected: Bool) {
         titleField.stringValue = tab.title
-        subtitleField.stringValue = tab.subtitle ?? ""
-        subtitleField.isHidden = tab.subtitle == nil
         bellDot.isHidden = !tab.hasBell || selected
-        shortcutField.stringValue = index < 9 ? "⌘\(index + 1)" : ""
     }
 }

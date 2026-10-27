@@ -110,7 +110,7 @@ enum DebugSnapshot {
         report += "tabs:\n"
         for (i, tab) in workspace.tabs.enumerated() {
             let marker = tab === workspace.selectedTab ? "*" : " "
-            report += " \(marker)\(i + 1) \(tab.title) | \(tab.subtitle ?? "") \(tab.hasBell ? "(bell)" : "")"
+            report += " \(marker)\(i + 1) \(tab.title) \(tab.hasBell ? "(bell)" : "")"
             report += " panes: \(tab.paneCount)\(tab.zoomed != nil ? " (zoomed)" : "")\n"
         }
         report += workspace.sidebarReport

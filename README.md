@@ -33,12 +33,11 @@ the tab list:
 | `J` / `K` | move tab down / up |
 | `n` | new tab |
 | `x` | close tab |
-| `r` | rename (empty resets to the shell title) |
+| `r` | rename (empty resets to the folder name) |
 | `l`, `⏎`, `esc` | back to the terminal |
 
-The sidebar header shows the project (git work tree or directory) of the
-focused pane and its branch, so it follows `cd` and pane switches. Below
-the tabs, the changes list shows `git status`: staged files, then
+Below the tabs, the changes list shows `git status` of the focused pane's
+git work tree, so it follows `cd` and pane switches: staged files, then
 unstaged and untracked ones, updated as files change.
 
 | key | action |

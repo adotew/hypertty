@@ -22,8 +22,6 @@ final class ChangesViewController: NSViewController {
     weak var delegate: ChangesDelegate?
     /// ⇥ switches to the tab list.
     var onSwitchMode: (() -> Void)?
-    /// The branch or the project changed.
-    var onStatusChange: (() -> Void)?
 
     let tableView = SidebarTableView()
     private(set) var root: URL?
@@ -133,7 +131,6 @@ final class ChangesViewController: NSViewController {
         let row = selected.flatMap { selected in rows.firstIndex { change(in: $0) == selected } }
         if let row { tableView.selectRowIndexes([row], byExtendingSelection: false) }
         if hasFocus && tableView.selectedRow < 0 { select(0, step: 1) }
-        onStatusChange?()
     }
 
     // MARK: Focus

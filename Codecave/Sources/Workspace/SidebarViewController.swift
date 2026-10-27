@@ -1,7 +1,6 @@
 import AppKit
 
-/// The window's sidebar: the project and branch in the titlebar, then the
-/// tab list above the git changes. ⌘S focuses the tabs, ⌘⇧E the changes;
+/// The window's sidebar: the tab list above the git changes. ⌘S focuses the tabs, ⌘⇧E the changes;
 /// ⇥ switches between them.
 final class SidebarViewController: NSViewController {
     enum Mode { case tabs, changes }
@@ -12,14 +11,10 @@ final class SidebarViewController: NSViewController {
     private(set) var mode: Mode = .tabs
 
     private let theme: Theme
-    private let projectLabel = NSTextField(labelWithString: "")
-    private let branchLabel = NSTextField(labelWithString: "")
     private var tabListHeight: NSLayoutConstraint!
 
-    /// Puts the header in the titlebar, right of the traffic lights
-    /// (14pt buttons 9pt from the top, the last ending at x = 69).
-    private static let topInset: CGFloat = 4
-    private static let leadingInset: CGFloat = 80
+    /// Clears the traffic lights (14pt buttons 9pt from the top).
+    private static let topInset: CGFloat = 34
 
     init(theme: Theme) {
         self.theme = theme
@@ -40,59 +35,29 @@ final class SidebarViewController: NSViewController {
 
         tabList.onSwitchMode = { [weak self] in self?.focus(.changes) }
         changes.onSwitchMode = { [weak self] in self?.focus(.tabs) }
-        changes.onStatusChange = { [weak self] in self?.updateHeader() }
-
-        projectLabel.font = .systemFont(ofSize: 12.5, weight: .semibold)
-        projectLabel.textColor = theme.foreground
-        projectLabel.lineBreakMode = .byTruncatingTail
-        projectLabel.setContentCompressionResistancePriority(.init(740), for: .horizontal)
-        branchLabel.font = .systemFont(ofSize: 11.5)
-        branchLabel.textColor = theme.secondaryText
-        branchLabel.lineBreakMode = .byTruncatingTail
-        branchLabel.setContentCompressionResistancePriority(.init(730), for: .horizontal)
-
-        let header = NSStackView(views: [projectLabel, branchLabel])
-        header.orientation = .horizontal
-        header.alignment = .firstBaseline
-        header.spacing = 6
-        header.translatesAutoresizingMaskIntoConstraints = false
-
-        let tabsTitle = SectionHeaderView(theme: theme)
-        tabsTitle.configure(title: "Tabs")
-        tabsTitle.translatesAutoresizingMaskIntoConstraints = false
 
         addChild(tabList)
         addChild(changes)
-        for view in [header, tabsTitle, tabList.view, changes.view] {
+        for view in [tabList.view, changes.view] {
             view.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(view)
-        }
-        // The tab list is as tall as its rows, up to half the sidebar.
-        tabListHeight = tabList.view.heightAnchor.constraint(equalToConstant: 0)
-        tabListHeight.priority = .defaultHigh
-        NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: root.topAnchor, constant: Self.topInset),
-            header.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: Self.leadingInset),
-            header.trailingAnchor.constraint(lessThanOrEqualTo: root.trailingAnchor, constant: -12),
-            header.heightAnchor.constraint(equalToConstant: 24),
-
-            tabsTitle.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 8),
-            tabsTitle.heightAnchor.constraint(equalToConstant: 22),
-            tabList.view.topAnchor.constraint(equalTo: tabsTitle.bottomAnchor),
-            tabListHeight,
-            tabList.view.heightAnchor.constraint(lessThanOrEqualTo: root.heightAnchor, multiplier: 0.5),
-            changes.view.topAnchor.constraint(equalTo: tabList.view.bottomAnchor, constant: 6),
-            changes.view.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -8),
-        ])
-        for view in [tabsTitle, tabList.view, changes.view] {
             NSLayoutConstraint.activate([
                 view.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 8),
                 view.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
             ])
         }
+        // The tab list is as tall as its rows, up to half the sidebar.
+        tabListHeight = tabList.view.heightAnchor.constraint(equalToConstant: 0)
+        tabListHeight.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            tabList.view.topAnchor.constraint(equalTo: root.topAnchor, constant: Self.topInset),
+            tabListHeight,
+            tabList.view.heightAnchor.constraint(lessThanOrEqualTo: root.heightAnchor, multiplier: 0.5),
+            changes.view.topAnchor.constraint(equalTo: tabList.view.bottomAnchor, constant: 6),
+            changes.view.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -8),
+        ])
 
         view = root
-        updateHeader()
     }
 
     // MARK: Tabs
@@ -122,19 +87,6 @@ final class SidebarViewController: NSViewController {
         case .tabs: tabList.focus()
         case .changes: changes.focus()
         }
-    }
-
-    private func updateHeader() {
-        projectLabel.stringValue = changes.root?.lastPathComponent ?? ""
-        projectLabel.toolTip = changes.root.map { ($0.path as NSString).abbreviatingWithTildeInPath }
-        guard let status = changes.status else {
-            branchLabel.stringValue = ""
-            return
-        }
-        var branch = status.branch
-        if status.ahead > 0 { branch += " ↑\(status.ahead)" }
-        if status.behind > 0 { branch += " ↓\(status.behind)" }
-        branchLabel.stringValue = branch
     }
 }
 
