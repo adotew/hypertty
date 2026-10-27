@@ -12,7 +12,7 @@ import GhosttyKit
 ///       steps run 0.5s apart: Ghostty keybind actions on the selected
 ///       terminal, `@selector:` sent through the responder chain, or
 ///       `key:<chars>` typed into the first responder (`\r` for Return,
-///       `\t` for Tab)
+///       `\t` for Tab), or `web:<url>` opened in a split
 ///
 /// The PNG composites the window's AppKit views with the frame libghostty
 /// rendered (read back from the terminal's IOSurface-backed layer).
@@ -37,7 +37,7 @@ enum DebugSnapshot {
     private static func run(_ steps: ArraySlice<String>, in workspace: WorkspaceWindowController,
                             then done: @escaping () -> Void) {
         guard let step = steps.first else { return done() }
-        let terminal = workspace.selectedTab?.focused
+        let terminal = workspace.selectedTab?.focused as? TerminalView
 
         if step.hasPrefix("input:"), let surface = terminal?.surface {
             // Text arrives like a paste; Return is a real key press so the shell runs it.
@@ -54,6 +54,9 @@ enum DebugSnapshot {
             // while the app is still activating.
             let selector = Selector(String(step.dropFirst()))
             NSApp.sendAction(selector, to: workspace.responds(to: selector) ? workspace : nil, from: nil)
+        } else if step.hasPrefix("web:"), let pane = workspace.selectedTab?.focused,
+                  let url = URL(string: String(step.dropFirst("web:".count))) {
+            _ = workspace.pane(pane, perform: .openURL(url))
         } else if step.hasPrefix("key:"), let window = workspace.window {
             let keys = step.dropFirst("key:".count)
                 .replacingOccurrences(of: "\\r", with: "\r").replacingOccurrences(of: "\\t", with: "\t")
@@ -90,7 +93,7 @@ enum DebugSnapshot {
             contentView.bounds.fill()
             views.draw(in: contentView.bounds, from: .zero, operation: .sourceOver, fraction: 1,
                        respectFlipped: false, hints: nil)
-            for terminal in workspace.selectedTab?.terminals ?? [] where terminal.window != nil {
+            for terminal in terminals(workspace.selectedTab) where terminal.window != nil {
                 let rect = terminal.convert(terminal.bounds, to: nil)
                 if let frame = terminalImage(terminal) {
                     NSGraphicsContext.current?.cgContext.draw(frame, in: rect)
@@ -108,15 +111,15 @@ enum DebugSnapshot {
         var report = "window visible: \(window.occlusionState.contains(.visible)) key: \(window.isKeyWindow)\n"
         report += "first responder: \(window.firstResponder.map { String(describing: type(of: $0)) } ?? "-")\n"
         report += "tabs:\n"
-        for (i, tab) in workspace.tabs.enumerated() {
+        for (index, tab) in workspace.tabs.enumerated() {
             let marker = tab === workspace.selectedTab ? "*" : " "
-            report += " \(marker)\(i + 1) \(tab.title) \(tab.hasBell ? "(bell)" : "")"
+            report += " \(marker)\(index + 1) \(tab.title) \(tab.hasBell ? "(bell)" : "")"
             report += " panes: \(tab.paneCount)\(tab.zoomed != nil ? " (zoomed)" : "")\n"
         }
         report += workspace.sidebarReport
         if let tab = workspace.selectedTab {
             report += "panes of selected tab (window points):\n"
-            for terminal in tab.terminals {
+            for terminal in terminals(tab) {
                 let frame = terminal.window != nil ? terminal.convert(terminal.bounds, to: nil) : .zero
                 let size = terminal.surface.map(ghostty_surface_size)
                 report += " \(terminal === tab.focused ? "*" : " ") \(Int(frame.minX)),\(Int(frame.minY))"
@@ -124,11 +127,15 @@ enum DebugSnapshot {
                 report += " first responder: \(terminal.window?.firstResponder === terminal)"
                 report += " dimmed: \(enclosingPane(terminal)?.dimmed ?? false)\n"
             }
-            if let surface = tab.focused.surface {
+            if let surface = (tab.focused as? TerminalView)?.surface {
                 report += "---\n" + screenText(surface)
             }
         }
         try? report.write(toFile: path + ".txt", atomically: true, encoding: .utf8)
+    }
+
+    private static func terminals(_ tab: Tab?) -> [TerminalView] {
+        tab?.panes.compactMap { $0 as? TerminalView } ?? []
     }
 
     private static func enclosingPane(_ terminal: TerminalView) -> PaneView? {
@@ -136,9 +143,8 @@ enum DebugSnapshot {
     }
 
     private static func terminalImage(_ terminal: TerminalView) -> CGImage? {
-        guard let contents = terminal.layer?.contents,
-              CFGetTypeID(contents as CFTypeRef) == IOSurfaceGetTypeID() else { return nil }
-        let image = CIImage(ioSurface: contents as! IOSurface)
+        guard let surface = terminal.layer?.contents as? IOSurface else { return nil }
+        let image = CIImage(ioSurface: surface)
         return CIContext().createCGImage(image, from: image.extent)
     }
 

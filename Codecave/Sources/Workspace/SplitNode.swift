@@ -8,54 +8,54 @@ enum SplitAxis {
     case vertical
 }
 
-/// An immutable tree of terminals. Behavior (navigation, resizing,
+/// An immutable tree of panes. Behavior (navigation, resizing,
 /// equalizing) mirrors Ghostty's macOS SplitTree so the same keybinds do
 /// the same thing.
 indirect enum SplitNode {
-    case leaf(TerminalView)
+    case leaf(any Pane)
     /// `ratio` is the share of the first (left/top) child.
     case split(SplitAxis, ratio: CGFloat, SplitNode, SplitNode)
 
-    var leaves: [TerminalView] {
+    var leaves: [any Pane] {
         switch self {
-        case .leaf(let terminal): [terminal]
+        case .leaf(let pane): [pane]
         case .split(_, _, let first, let second): first.leaves + second.leaves
         }
     }
 
-    func contains(_ terminal: TerminalView) -> Bool {
-        leaves.contains { $0 === terminal }
+    func contains(_ pane: any Pane) -> Bool {
+        leaves.contains { $0 === pane }
     }
 
-    /// Splits `target`, placing `terminal` on the given side of it.
-    func inserting(_ terminal: TerminalView, at target: TerminalView,
+    /// Splits `target`, placing `pane` on the given side of it.
+    func inserting(_ pane: any Pane, at target: any Pane,
                    direction: ghostty_action_split_direction_e) -> SplitNode {
         switch self {
         case .leaf(let existing) where existing === target:
             switch direction {
-            case GHOSTTY_SPLIT_DIRECTION_LEFT: return .split(.horizontal, ratio: 0.5, .leaf(terminal), self)
-            case GHOSTTY_SPLIT_DIRECTION_UP: return .split(.vertical, ratio: 0.5, .leaf(terminal), self)
-            case GHOSTTY_SPLIT_DIRECTION_DOWN: return .split(.vertical, ratio: 0.5, self, .leaf(terminal))
-            default: return .split(.horizontal, ratio: 0.5, self, .leaf(terminal))
+            case GHOSTTY_SPLIT_DIRECTION_LEFT: return .split(.horizontal, ratio: 0.5, .leaf(pane), self)
+            case GHOSTTY_SPLIT_DIRECTION_UP: return .split(.vertical, ratio: 0.5, .leaf(pane), self)
+            case GHOSTTY_SPLIT_DIRECTION_DOWN: return .split(.vertical, ratio: 0.5, self, .leaf(pane))
+            default: return .split(.horizontal, ratio: 0.5, self, .leaf(pane))
             }
         case .leaf:
             return self
         case .split(let axis, let ratio, let first, let second):
             return .split(axis, ratio: ratio,
-                          first.inserting(terminal, at: target, direction: direction),
-                          second.inserting(terminal, at: target, direction: direction))
+                          first.inserting(pane, at: target, direction: direction),
+                          second.inserting(pane, at: target, direction: direction))
         }
     }
 
-    /// Removes `terminal`; its sibling takes the parent's place. Nil if
+    /// Removes `pane`; its sibling takes the parent's place. Nil if
     /// nothing is left.
-    func removing(_ terminal: TerminalView) -> SplitNode? {
+    func removing(_ pane: any Pane) -> SplitNode? {
         switch self {
         case .leaf(let existing):
-            return existing === terminal ? nil : self
+            return existing === pane ? nil : self
         case .split(let axis, let ratio, let first, let second):
-            guard let newFirst = first.removing(terminal) else { return second }
-            guard let newSecond = second.removing(terminal) else { return first }
+            guard let newFirst = first.removing(pane) else { return second }
+            guard let newSecond = second.removing(pane) else { return first }
             return .split(axis, ratio: ratio, newFirst, newSecond)
         }
     }
@@ -90,7 +90,7 @@ indirect enum SplitNode {
 
     /// Moves the divider of the nearest enclosing split along the resize
     /// direction by `amount` points.
-    func resizing(_ terminal: TerminalView, direction: ghostty_action_resize_split_direction_e,
+    func resizing(_ pane: any Pane, direction: ghostty_action_resize_split_direction_e,
                   amount: CGFloat, in size: CGSize) -> SplitNode {
         let axis: SplitAxis
         let delta: CGFloat
@@ -100,20 +100,20 @@ indirect enum SplitNode {
         case GHOSTTY_RESIZE_SPLIT_UP: (axis, delta) = (.vertical, -amount)
         default: (axis, delta) = (.vertical, amount)
         }
-        return resizing(terminal, axis: axis, delta: delta, in: size).node
+        return resizing(pane, axis: axis, delta: delta, in: size).node
     }
 
-    private func resizing(_ terminal: TerminalView, axis: SplitAxis, delta: CGFloat,
+    private func resizing(_ pane: any Pane, axis: SplitAxis, delta: CGFloat,
                           in size: CGSize) -> (node: SplitNode, done: Bool) {
         guard case .split(let splitAxis, let ratio, let first, let second) = self else { return (self, false) }
         let (firstRect, secondRect) = Self.divide(CGRect(origin: .zero, size: size), splitAxis, ratio)
 
         // Deepest matching ancestor first.
-        if first.contains(terminal) {
-            let (node, done) = first.resizing(terminal, axis: axis, delta: delta, in: firstRect.size)
+        if first.contains(pane) {
+            let (node, done) = first.resizing(pane, axis: axis, delta: delta, in: firstRect.size)
             if done { return (.split(splitAxis, ratio: ratio, node, second), true) }
-        } else if second.contains(terminal) {
-            let (node, done) = second.resizing(terminal, axis: axis, delta: delta, in: secondRect.size)
+        } else if second.contains(pane) {
+            let (node, done) = second.resizing(pane, axis: axis, delta: delta, in: secondRect.size)
             if done { return (.split(splitAxis, ratio: ratio, first, node), true) }
         } else {
             return (self, false)
@@ -129,10 +129,10 @@ indirect enum SplitNode {
     // MARK: Geometry and navigation
 
     /// Pane frames in a top-left-origin coordinate space.
-    func frames(in rect: CGRect) -> [(terminal: TerminalView, frame: CGRect)] {
+    func frames(in rect: CGRect) -> [(pane: any Pane, frame: CGRect)] {
         switch self {
-        case .leaf(let terminal):
-            return [(terminal, rect)]
+        case .leaf(let pane):
+            return [(pane, rect)]
         case .split(let axis, let ratio, let first, let second):
             let (firstRect, secondRect) = Self.divide(rect, axis, ratio)
             return first.frames(in: firstRect) + second.frames(in: secondRect)
@@ -154,9 +154,9 @@ indirect enum SplitNode {
 
     /// The pane `goto_split` moves to: previous/next wrap in tree order;
     /// directions pick the closest pane (by top-left corner) on that side.
-    func target(from terminal: TerminalView, _ direction: ghostty_action_goto_split_e) -> TerminalView? {
+    func target(from pane: any Pane, _ direction: ghostty_action_goto_split_e) -> (any Pane)? {
         let leaves = self.leaves
-        guard leaves.count > 1, let index = leaves.firstIndex(where: { $0 === terminal }) else { return nil }
+        guard leaves.count > 1, let index = leaves.firstIndex(where: { $0 === pane }) else { return nil }
 
         switch direction {
         case GHOSTTY_GOTO_SPLIT_PREVIOUS:
@@ -168,10 +168,10 @@ indirect enum SplitNode {
         }
 
         let slots = frames(in: CGRect(x: 0, y: 0, width: 1000, height: 1000))
-        guard let current = slots.first(where: { $0.terminal === terminal })?.frame else { return nil }
+        guard let current = slots.first(where: { $0.pane === pane })?.frame else { return nil }
         let epsilon: CGFloat = 0.001
         let candidates = slots.filter { slot in
-            guard slot.terminal !== terminal else { return false }
+            guard slot.pane !== pane else { return false }
             switch direction {
             case GHOSTTY_GOTO_SPLIT_LEFT: return slot.frame.maxX <= current.minX + epsilon
             case GHOSTTY_GOTO_SPLIT_RIGHT: return slot.frame.minX >= current.maxX - epsilon
@@ -179,9 +179,9 @@ indirect enum SplitNode {
             default: return slot.frame.minY >= current.maxY - epsilon
             }
         }
-        return candidates.min { a, b in
-            hypot(a.frame.minX - current.minX, a.frame.minY - current.minY)
-                < hypot(b.frame.minX - current.minX, b.frame.minY - current.minY)
-        }?.terminal
+        func distance(_ slot: (pane: any Pane, frame: CGRect)) -> CGFloat {
+            hypot(slot.frame.minX - current.minX, slot.frame.minY - current.minY)
+        }
+        return candidates.min { distance($0) < distance($1) }?.pane
     }
 }

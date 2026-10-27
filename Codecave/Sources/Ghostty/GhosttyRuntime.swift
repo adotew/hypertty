@@ -98,6 +98,45 @@ final class GhosttyRuntime {
         }
     }
 
+    /// Gives `item` the shortcut your config binds to a keybind action such
+    /// as "goto_split:left", if a menu can show it. Menus are how keybinds
+    /// reach panes that aren't terminals.
+    func applyShortcut(for action: String, to item: NSMenuItem) {
+        guard let config else { return }
+        let trigger = ghostty_config_trigger(config, action, UInt(action.utf8.count))
+        let key: String
+        switch trigger.tag {
+        case GHOSTTY_TRIGGER_UNICODE:
+            guard let scalar = UnicodeScalar(trigger.key.unicode) else { return }
+            key = String(scalar)
+        case GHOSTTY_TRIGGER_PHYSICAL:
+            guard let code = Self.menuKeys[trigger.key.physical], let scalar = UnicodeScalar(code) else { return }
+            key = String(scalar)
+        default:
+            return
+        }
+        item.keyEquivalent = key
+        item.keyEquivalentModifierMask = GhosttyInput.flags(trigger.mods)
+    }
+
+    /// Physical keys a menu shortcut can use (letters come as unicode triggers).
+    private static let menuKeys: [ghostty_input_key_e: Int] = [
+        GHOSTTY_KEY_ARROW_UP: NSUpArrowFunctionKey,
+        GHOSTTY_KEY_ARROW_DOWN: NSDownArrowFunctionKey,
+        GHOSTTY_KEY_ARROW_LEFT: NSLeftArrowFunctionKey,
+        GHOSTTY_KEY_ARROW_RIGHT: NSRightArrowFunctionKey,
+        GHOSTTY_KEY_HOME: NSHomeFunctionKey,
+        GHOSTTY_KEY_END: NSEndFunctionKey,
+        GHOSTTY_KEY_PAGE_UP: NSPageUpFunctionKey,
+        GHOSTTY_KEY_PAGE_DOWN: NSPageDownFunctionKey,
+        GHOSTTY_KEY_ENTER: 0x0D,
+        GHOSTTY_KEY_TAB: 0x09,
+        GHOSTTY_KEY_ESCAPE: 0x1B,
+        GHOSTTY_KEY_SPACE: 0x20,
+        GHOSTTY_KEY_BACKSPACE: 0x08,
+        GHOSTTY_KEY_DELETE: NSDeleteFunctionKey,
+    ]
+
     // MARK: Config
 
     /// Loads the same files Ghostty.app does: ~/.config/ghostty/config and
@@ -187,7 +226,7 @@ final class GhosttyRuntime {
 
         func host(_ command: TerminalCommand) -> Bool {
             guard let view, let delegate = view.delegate else { return false }
-            return delegate.terminal(view, perform: command)
+            return delegate.pane(view, perform: command)
         }
 
         switch action.tag {
@@ -268,6 +307,8 @@ final class GhosttyRuntime {
                 ? URL(string: string)
                 : URL(fileURLWithPath: (string as NSString).expandingTildeInPath)
             guard let url else { return false }
+            // Web links open in a split; the rest in their default app.
+            if ["http", "https"].contains(url.scheme), host(.openURL(url)) { return true }
             NSWorkspace.shared.open(url)
 
         case GHOSTTY_ACTION_OPEN_CONFIG:

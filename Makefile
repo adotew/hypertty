@@ -15,10 +15,10 @@ $(GHOSTTYKIT):
 ghostty:
 	./scripts/build-ghosttykit.sh
 
-project: Codecave.xcodeproj
-
-Codecave.xcodeproj: project.yml
-	xcodegen generate --quiet
+# Always regenerated so new source files are picked up; the cache makes
+# it a no-op when nothing changed.
+project:
+	xcodegen generate --quiet --use-cache
 
 app: $(GHOSTTYKIT) project
 	xcodebuild -project Codecave.xcodeproj -scheme Codecave -configuration Debug \

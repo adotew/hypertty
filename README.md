@@ -21,6 +21,11 @@ background, separated by gaps; drag a gap to resize. Each card is filled
 with your terminal `background`. `unfocused-split-opacity` and
 `unfocused-split-fill` dim unfocused panes.
 
+A pane can also show a web page: `⌘`-click a link in the terminal, or
+`⌘L` and type a URL (`localhost:3000` works), to open it in a split to
+the right. `⌘R` reloads it. The split keybinds keep working there: the
+View menu takes their shortcuts from your Ghostty config.
+
 Codecave adds `⌘B` (toggle sidebar), `⌘S` (focus the tab list) and `⌘⇧E`
 (focus the changes). `⇥` switches between the two in the sidebar. In
 the tab list:
@@ -77,7 +82,8 @@ make run       # generates the Xcode project, builds and opens the app
   Zig-produced archive members.
 - `Codecave/Sources/Ghostty`: the libghostty embedding (runtime callbacks,
   the terminal NSView and its keyboard/IME/mouse handling).
-- `Codecave/Sources/Workspace`: windows, tabs, splits and the sidebar
+- `Codecave/Sources/Workspace`: windows, tabs, splits (terminal and web
+  panes) and the sidebar
   (tab list and file tree).
 - `Codecave/Resources/FileIcons`: file type icons.
 

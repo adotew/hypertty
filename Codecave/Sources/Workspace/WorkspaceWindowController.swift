@@ -1,7 +1,8 @@
 import AppKit
 import GhosttyKit
 
-/// A window with a vertical tab sidebar; each tab holds split terminals.
+/// A window with a vertical tab sidebar; each tab holds split terminals and
+/// web pages.
 ///
 /// Tab and split shortcuts are Ghostty keybinds (new_tab, goto_tab,
 /// new_split, goto_split, resize_split, ...), so they follow your Ghostty
@@ -151,7 +152,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     private func close(_ tab: Tab) {
         guard let index = tabs.firstIndex(where: { $0 === tab }) else { return }
         let sidebarHadFocus = sidebar.hasFocus
-        tab.terminals.forEach { $0.teardown() }
+        tab.panes.forEach { $0.teardown() }
         tab.view.removeFromSuperview()
         tabs.remove(at: index)
 
@@ -206,8 +207,8 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     // MARK: Focus
 
     func focusTerminal() {
-        if let terminal = selectedTab?.focused {
-            window?.makeFirstResponder(terminal)
+        if let pane = selectedTab?.focused {
+            window?.makeFirstResponder(pane)
         }
         if sidebarPeeking {
             sidebarPeeking = false
@@ -279,20 +280,33 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     // Split menu items act on the selected tab's focused pane, e.g. while
     // the sidebar has focus. In the terminal, Ghostty's keybinds run first.
 
-    @objc func splitRight(_ sender: Any?) {
-        if let terminal = selectedTab?.focused { _ = perform(.newSplit(GHOSTTY_SPLIT_DIRECTION_RIGHT), from: terminal) }
+    /// Runs the `TerminalCommand` in the item's representedObject.
+    @objc func performMenuCommand(_ sender: NSMenuItem) {
+        guard let command = sender.representedObject as? TerminalCommand, let pane = selectedTab?.focused else { return }
+        _ = perform(command, from: pane)
     }
 
-    @objc func splitDown(_ sender: Any?) {
-        if let terminal = selectedTab?.focused { _ = perform(.newSplit(GHOSTTY_SPLIT_DIRECTION_DOWN), from: terminal) }
+    /// Closes the focused pane, or the tab with its last pane.
+    @objc func closePane(_ sender: Any?) {
+        guard let tab = selectedTab else { return }
+        closePane(tab.focused, in: tab, confirm: tab.focused.needsConfirmQuit)
     }
 
-    @objc func toggleSplitZoom(_ sender: Any?) {
-        if let terminal = selectedTab?.focused { _ = perform(.toggleSplitZoom, from: terminal) }
-    }
-
-    @objc func equalizeSplits(_ sender: Any?) {
-        if let terminal = selectedTab?.focused { _ = perform(.equalizeSplits, from: terminal) }
+    /// Asks for a URL and opens it in a split right of the focused pane.
+    @objc func newWebSplit(_ sender: Any?) {
+        guard let window, window.attachedSheet == nil, let pane = selectedTab?.focused else { return }
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        field.placeholderString = "localhost:3000"
+        let alert = NSAlert()
+        alert.messageText = "Open a web page in a split"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Open")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn, let url = WebPaneView.url(from: field.stringValue) else { return }
+            self?.openWebPane(url, beside: pane)
+        }
     }
 
     @objc func renameTab(_ sender: Any?) {
@@ -311,7 +325,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        tabs.forEach { $0.terminals.forEach { $0.teardown() } }
+        tabs.forEach { $0.panes.forEach { $0.teardown() } }
         tabs = []
         onClose?(self)
     }
@@ -322,24 +336,32 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     }
 }
 
-// MARK: - TerminalViewDelegate
+// MARK: - PaneDelegate
 
-extension WorkspaceWindowController: TerminalViewDelegate {
-    private func tab(for terminal: TerminalView) -> Tab? {
-        tabs.first { $0.root.contains(terminal) }
+extension WorkspaceWindowController: PaneDelegate {
+    private func tab(for pane: any Pane) -> Tab? {
+        tabs.first { $0.root.contains(pane) }
+    }
+
+    private func openWebPane(_ url: URL, beside pane: any Pane) {
+        guard let tab = tab(for: pane) else { return }
+        let web = WebPaneView(url: url, pwd: pane.pwd, dark: theme.isDark)
+        web.delegate = self
+        tab.split(pane, adding: web, direction: GHOSTTY_SPLIT_DIRECTION_RIGHT)
+        window?.makeFirstResponder(web)
     }
 
     /// Closes one pane; closing the last pane closes the tab.
-    private func closePane(_ terminal: TerminalView, in tab: Tab, confirm: Bool) {
+    private func closePane(_ pane: any Pane, in tab: Tab, confirm: Bool) {
         guard tab.paneCount > 1 else {
             requestClose([tab], confirm: confirm)
             return
         }
         let close = { [weak self] in
             guard let self else { return }
-            let wasFocused = tab.focused === terminal
-            terminal.teardown()
-            let next = tab.remove(terminal)
+            let wasFocused = tab.focused === pane
+            pane.teardown()
+            let next = tab.remove(pane)
             if wasFocused, tab === selectedTab, !sidebar.hasFocus, let next {
                 window?.makeFirstResponder(next)
             }
@@ -352,8 +374,8 @@ extension WorkspaceWindowController: TerminalViewDelegate {
         }
     }
 
-    func terminalDidUpdate(_ terminal: TerminalView) {
-        guard let tab = tab(for: terminal) else { return }
+    func paneDidUpdate(_ pane: any Pane) {
+        guard let tab = tab(for: pane) else { return }
         if tab === selectedTab {
             window?.title = tab.title
             updateChanges()
@@ -361,9 +383,9 @@ extension WorkspaceWindowController: TerminalViewDelegate {
         sidebar.refresh(tab: tab)
     }
 
-    func terminalDidFocus(_ terminal: TerminalView) {
-        guard let tab = tab(for: terminal) else { return }
-        tab.focusDidChange(to: terminal)
+    func paneDidFocus(_ pane: any Pane) {
+        guard let tab = tab(for: pane) else { return }
+        tab.focusDidChange(to: pane)
         if tab === selectedTab {
             window?.title = tab.title
             updateChanges()
@@ -371,21 +393,21 @@ extension WorkspaceWindowController: TerminalViewDelegate {
         sidebar.refresh(tab: tab)
     }
 
-    func terminalDidRequestClose(_ terminal: TerminalView, confirm: Bool) {
-        guard let tab = tab(for: terminal) else { return }
-        closePane(terminal, in: tab, confirm: confirm)
+    func paneDidRequestClose(_ pane: any Pane, confirm: Bool) {
+        guard let tab = tab(for: pane) else { return }
+        closePane(pane, in: tab, confirm: confirm)
     }
 
-    func terminal(_ terminal: TerminalView, perform command: TerminalCommand) -> Bool {
-        perform(command, from: terminal)
+    func pane(_ pane: any Pane, perform command: TerminalCommand) -> Bool {
+        perform(command, from: pane)
     }
 
-    private func perform(_ command: TerminalCommand, from terminal: TerminalView) -> Bool {
-        guard let tab = tab(for: terminal), let index = tabs.firstIndex(where: { $0 === tab }) else { return false }
+    private func perform(_ command: TerminalCommand, from pane: any Pane) -> Bool {
+        guard let tab = tab(for: pane), let index = tabs.firstIndex(where: { $0 === tab }) else { return false }
 
         switch command {
         case .newTab:
-            addTab(options: SurfaceOptions(inheriting: terminal, context: GHOSTTY_SURFACE_CONTEXT_TAB))
+            addTab(options: SurfaceOptions(inheriting: pane, context: GHOSTTY_SURFACE_CONTEXT_TAB))
 
         case .closeTab(let mode):
             switch mode {
@@ -410,18 +432,18 @@ extension WorkspaceWindowController: TerminalViewDelegate {
             window?.performClose(nil)
 
         case .newSplit(let direction):
-            let options = SurfaceOptions(inheriting: terminal, context: GHOSTTY_SURFACE_CONTEXT_SPLIT)
+            let options = SurfaceOptions(inheriting: pane, context: GHOSTTY_SURFACE_CONTEXT_SPLIT)
             guard let newTerminal = makeTerminal(options) else { return false }
-            tab.split(terminal, adding: newTerminal, direction: direction)
+            tab.split(pane, adding: newTerminal, direction: direction)
             window?.makeFirstResponder(newTerminal)
 
         case .gotoSplit(let direction):
-            guard let target = tab.target(from: terminal, direction) else { return false }
+            guard let target = tab.target(from: pane, direction) else { return false }
             tab.unzoom()
             window?.makeFirstResponder(target)
 
         case .resizeSplit(let resize):
-            tab.resize(terminal, resize)
+            tab.resize(pane, resize)
 
         case .equalizeSplits:
             tab.equalize()
@@ -429,6 +451,9 @@ extension WorkspaceWindowController: TerminalViewDelegate {
         case .toggleSplitZoom:
             tab.toggleZoom()
             window?.makeFirstResponder(tab.focused)
+
+        case .openURL(let url):
+            openWebPane(url, beside: pane)
         }
         return true
     }

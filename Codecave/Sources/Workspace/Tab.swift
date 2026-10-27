@@ -1,7 +1,7 @@
 import AppKit
 import GhosttyKit
 
-/// One entry in the sidebar: a tree of split terminals. `view` hosts the
+/// One entry in the sidebar: a tree of split panes. `view` hosts the
 /// tree and is what the window shows when the tab is selected.
 final class Tab {
     /// Renders the panes' glass together; spacing 0 keeps separate cards
@@ -10,14 +10,14 @@ final class Tab {
     private let content = NSView()
     private(set) var root: SplitNode
     /// The pane that has (or last had) keyboard focus.
-    private(set) var focused: TerminalView
+    private(set) var focused: any Pane
     /// Set by `toggle_split_zoom`: only this pane is shown.
-    private(set) var zoomed: TerminalView?
+    private(set) var zoomed: (any Pane)?
     /// Set by renaming the tab; overrides the folder name.
     var customTitle: String?
 
     private let theme: Theme
-    private var panes: [ObjectIdentifier: PaneView] = [:]
+    private var paneViews: [ObjectIdentifier: PaneView] = [:]
 
     init(terminal: TerminalView, theme: Theme) {
         root = .leaf(terminal)
@@ -28,53 +28,48 @@ final class Tab {
         rebuild()
     }
 
-    var terminals: [TerminalView] { root.leaves }
+    var panes: [any Pane] { root.leaves }
 
-    var needsConfirmQuit: Bool { terminals.contains { $0.needsConfirmQuit } }
+    var needsConfirmQuit: Bool { panes.contains { $0.needsConfirmQuit } }
 
     // MARK: Sidebar
 
-    /// The focused pane's folder name.
-    var title: String {
-        if let customTitle { return customTitle }
-        guard let pwd = focused.pwd else { return "Terminal" }
-        return pwd == NSHomeDirectory() ? "~" : (pwd as NSString).lastPathComponent
-    }
+    var title: String { customTitle ?? focused.tabTitle }
 
-    var hasBell: Bool { terminals.contains { $0.bell } }
+    var hasBell: Bool { panes.contains { $0.bell } }
 
-    var paneCount: Int { terminals.count }
+    var paneCount: Int { panes.count }
 
     // MARK: Splits
 
-    func split(_ target: TerminalView, adding terminal: TerminalView,
+    func split(_ target: any Pane, adding pane: any Pane,
                direction: ghostty_action_split_direction_e) {
         zoomed = nil
-        root = root.inserting(terminal, at: target, direction: direction)
+        root = root.inserting(pane, at: target, direction: direction)
         rebuild()
     }
 
     /// Removes a pane and returns the one to focus next, or nil if it was
     /// the last pane.
-    func remove(_ terminal: TerminalView) -> TerminalView? {
+    func remove(_ pane: any Pane) -> (any Pane)? {
         // Focus moves to the previous pane, like Ghostty.
-        let next = root.target(from: terminal, GHOSTTY_GOTO_SPLIT_PREVIOUS)
-        guard let newRoot = root.removing(terminal) else { return nil }
+        let next = root.target(from: pane, GHOSTTY_GOTO_SPLIT_PREVIOUS)
+        guard let newRoot = root.removing(pane) else { return nil }
         root = newRoot
-        panes[ObjectIdentifier(terminal)] = nil
-        if zoomed === terminal { zoomed = nil }
-        if focused === terminal, let next { focused = next }
+        paneViews[ObjectIdentifier(pane)] = nil
+        if zoomed === pane { zoomed = nil }
+        if focused === pane, let next { focused = next }
         rebuild()
         return next
     }
 
-    func target(from terminal: TerminalView, _ direction: ghostty_action_goto_split_e) -> TerminalView? {
-        root.target(from: terminal, direction)
+    func target(from pane: any Pane, _ direction: ghostty_action_goto_split_e) -> (any Pane)? {
+        root.target(from: pane, direction)
     }
 
-    func resize(_ terminal: TerminalView, _ resize: ghostty_action_resize_split_s) {
+    func resize(_ pane: any Pane, _ resize: ghostty_action_resize_split_s) {
         zoomed = nil
-        root = root.resizing(terminal, direction: resize.direction,
+        root = root.resizing(pane, direction: resize.direction,
                              amount: CGFloat(resize.amount), in: view.bounds.size)
         rebuild()
     }
@@ -85,7 +80,7 @@ final class Tab {
     }
 
     func toggleZoom() {
-        guard terminals.count > 1 else { return }
+        guard panes.count > 1 else { return }
         zoomed = zoomed == nil ? focused : nil
         rebuild()
     }
@@ -97,28 +92,28 @@ final class Tab {
     }
 
     /// Records which pane has focus and dims the others.
-    func focusDidChange(to terminal: TerminalView) {
-        guard root.contains(terminal) else { return }
-        focused = terminal
+    func focusDidChange(to pane: any Pane) {
+        guard root.contains(pane) else { return }
+        focused = pane
         updateDimming()
     }
 
     // MARK: Views
 
-    func pane(for terminal: TerminalView) -> PaneView {
-        if let pane = panes[ObjectIdentifier(terminal)] { return pane }
-        let pane = PaneView(terminal: terminal, theme: theme)
-        panes[ObjectIdentifier(terminal)] = pane
-        return pane
+    func view(for pane: any Pane) -> PaneView {
+        if let view = paneViews[ObjectIdentifier(pane)] { return view }
+        let view = PaneView(pane: pane, theme: theme)
+        paneViews[ObjectIdentifier(pane)] = view
+        return view
     }
 
-    /// Recreates the view hierarchy from the tree. Terminals are reparented,
+    /// Recreates the view hierarchy from the tree. Panes are reparented,
     /// not recreated, so their shells keep running.
     private func rebuild() {
         let hadFocus = focused.window?.firstResponder === focused
         content.subviews.forEach { $0.removeFromSuperview() }
 
-        let tree = zoomed.map { pane(for: $0) } ?? makeView(root, path: [])
+        let tree = zoomed.map { view(for: $0) } ?? makeView(root, path: [])
         tree.frame = content.bounds
         tree.autoresizingMask = [.width, .height]
         content.addSubview(tree)
@@ -132,8 +127,8 @@ final class Tab {
 
     private func makeView(_ node: SplitNode, path: [Bool]) -> NSView {
         switch node {
-        case .leaf(let terminal):
-            return pane(for: terminal)
+        case .leaf(let pane):
+            return view(for: pane)
         case .split(let axis, let ratio, let first, let second):
             let container = SplitContainerView(
                 axis: axis, ratio: ratio,
@@ -148,10 +143,9 @@ final class Tab {
     }
 
     private func updateDimming() {
-        let split = zoomed == nil && terminals.count > 1
-        for terminal in terminals {
-            let pane = pane(for: terminal)
-            pane.dimmed = split && terminal !== focused
+        let split = zoomed == nil && panes.count > 1
+        for pane in panes {
+            view(for: pane).dimmed = split && pane !== focused
         }
     }
 }

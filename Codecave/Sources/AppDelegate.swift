@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        windows.forEach { $0.tabs.forEach { $0.terminals.forEach { $0.teardown() } } }
+        windows.forEach { $0.tabs.forEach { $0.panes.forEach { $0.teardown() } } }
     }
 
     // MARK: Windows
@@ -41,7 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
         (NSApp.keyWindow ?? NSApp.mainWindow)?.windowController as? WorkspaceWindowController
     }
 
-    private func newWindow(inheriting parent: TerminalView?) {
+    private func newWindow(inheriting parent: (any Pane)?) {
         let controller = WorkspaceWindowController(
             runtime: runtime,
             options: SurfaceOptions(inheriting: parent, context: GHOSTTY_SURFACE_CONTEXT_WINDOW))
@@ -74,9 +74,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
 
     /// Most shortcuts are Ghostty keybinds handled by the terminal itself
     /// (cmd+c/v, cmd+t, cmd+n, cmd+w, cmd+1-9, ...), so they follow your
-    /// Ghostty config. The menu mirrors Ghostty's defaults for when the
-    /// terminal doesn't have focus (e.g. the sidebar does), and owns the
-    /// app-level shortcuts: ⌘B toggles the sidebar, ⌘S focuses it.
+    /// Ghostty config. The menu covers them when a terminal doesn't have
+    /// focus (the sidebar or a web page does): the pane items take their
+    /// shortcuts from your config, the rest mirror Ghostty's defaults. It
+    /// also owns the app-level shortcuts: ⌘B toggles the sidebar, ⌘S
+    /// focuses it.
     private func makeMainMenu() -> NSMenu {
         let main = NSMenu()
 
@@ -93,8 +95,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
                          keyEquivalent: "t")
         fileMenu.addItem(withTitle: "New Window", action: #selector(newWindow(_:)), keyEquivalent: "n")
         fileMenu.addItem(.separator())
-        fileMenu.addItem(withTitle: "Close Tab", action: #selector(WorkspaceWindowController.closeTab(_:)),
-                         keyEquivalent: "w")
+        fileMenu.addItem(ghosttyItem("Close", #selector(WorkspaceWindowController.closePane(_:)),
+                                     action: "close_surface"))
+        fileMenu.addItem(ghosttyItem("Close Tab", #selector(WorkspaceWindowController.closeTab(_:)),
+                                     action: "close_tab"))
         fileMenu.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "W")
         main.addItem(submenu: fileMenu, title: "File")
 
@@ -114,16 +118,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
         viewMenu.addItem(withTitle: "Rename Tab…", action: #selector(WorkspaceWindowController.renameTab(_:)),
                          keyEquivalent: "")
         viewMenu.addItem(.separator())
-        viewMenu.addItem(withTitle: "Split Right", action: #selector(WorkspaceWindowController.splitRight(_:)),
-                         keyEquivalent: "d")
-        viewMenu.addItem(withTitle: "Split Down", action: #selector(WorkspaceWindowController.splitDown(_:)),
-                         keyEquivalent: "D")
-        viewMenu.addItem(withTitle: "Zoom Split", action: #selector(WorkspaceWindowController.toggleSplitZoom(_:)),
-                         keyEquivalent: "\r")
-            .keyEquivalentModifierMask = [.command, .shift]
-        viewMenu.addItem(withTitle: "Equalize Splits",
-                         action: #selector(WorkspaceWindowController.equalizeSplits(_:)), keyEquivalent: "=")
-            .keyEquivalentModifierMask = [.command, .control]
+        viewMenu.addItem(commandItem("Split Right", .newSplit(GHOSTTY_SPLIT_DIRECTION_RIGHT), action: "new_split:right"))
+        viewMenu.addItem(commandItem("Split Down", .newSplit(GHOSTTY_SPLIT_DIRECTION_DOWN), action: "new_split:down"))
+        viewMenu.addItem(withTitle: "Open Web Page in Split…",
+                         action: #selector(WorkspaceWindowController.newWebSplit(_:)), keyEquivalent: "l")
+        viewMenu.addItem(withTitle: "Reload Page", action: #selector(WebPaneView.reload(_:)), keyEquivalent: "r")
+        viewMenu.addItem(.separator())
+        viewMenu.addItem(commandItem("Zoom Split", .toggleSplitZoom, action: "toggle_split_zoom"))
+        viewMenu.addItem(commandItem("Equalize Splits", .equalizeSplits, action: "equalize_splits"))
+        for (name, direction, action) in [
+            ("Previous", GHOSTTY_GOTO_SPLIT_PREVIOUS, "previous"), ("Next", GHOSTTY_GOTO_SPLIT_NEXT, "next"),
+            ("Left", GHOSTTY_GOTO_SPLIT_LEFT, "left"), ("Right", GHOSTTY_GOTO_SPLIT_RIGHT, "right"),
+            ("Above", GHOSTTY_GOTO_SPLIT_UP, "up"), ("Below", GHOSTTY_GOTO_SPLIT_DOWN, "down"),
+        ] {
+            viewMenu.addItem(commandItem("Select Split \(name)", .gotoSplit(direction), action: "goto_split:\(action)"))
+        }
+        for (name, direction, action) in [
+            ("Left", GHOSTTY_RESIZE_SPLIT_LEFT, "left"), ("Right", GHOSTTY_RESIZE_SPLIT_RIGHT, "right"),
+            ("Up", GHOSTTY_RESIZE_SPLIT_UP, "up"), ("Down", GHOSTTY_RESIZE_SPLIT_DOWN, "down"),
+        ] {
+            // Ghostty's default resize keybinds move by 10 points.
+            let resize = ghostty_action_resize_split_s(amount: 10, direction: direction)
+            viewMenu.addItem(commandItem("Resize Split \(name)", .resizeSplit(resize), action: "resize_split:\(action),10"))
+        }
         main.addItem(submenu: viewMenu, title: "View")
 
         let windowMenu = NSMenu(title: "Window")
@@ -148,6 +165,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
         NSApp.windowsMenu = windowMenu
 
         return main
+    }
+}
+
+private extension AppDelegate {
+    /// An item with the shortcut your Ghostty config binds to `action`.
+    func ghosttyItem(_ title: String, _ selector: Selector, action: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
+        runtime.applyShortcut(for: action, to: item)
+        return item
+    }
+
+    /// An item that runs `command` on the focused pane.
+    func commandItem(_ title: String, _ command: TerminalCommand, action: String) -> NSMenuItem {
+        let item = ghosttyItem(title, #selector(WorkspaceWindowController.performMenuCommand(_:)), action: action)
+        item.representedObject = command
+        return item
     }
 }
 

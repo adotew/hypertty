@@ -1,13 +1,13 @@
 import AppKit
 
-/// A pane drawn as a Liquid Glass card with the terminal filling it.
-/// The card is filled with the terminal background so the two are one
-/// color; the glass provides the edge. Unfocused panes are dimmed per
+/// A pane drawn as a Liquid Glass card with the terminal or web page
+/// filling it. The card is filled with the terminal background so the two
+/// are one color; the glass provides the edge. Unfocused panes are dimmed per
 /// Ghostty's `unfocused-split-opacity` / `unfocused-split-fill`.
 final class PaneView: NSView {
     static let cornerRadius: CGFloat = 12
 
-    let terminal: TerminalView
+    let pane: any Pane
     private let glass = NSGlassEffectView()
     private let card: CardContent
     private let overlay: DimOverlay
@@ -19,8 +19,8 @@ final class PaneView: NSView {
 
     var dimColor: NSColor { overlay.color }
 
-    init(terminal: TerminalView, theme: Theme) {
-        self.terminal = terminal
+    init(pane: any Pane, theme: Theme) {
+        self.pane = pane
         card = CardContent(color: theme.background, radius: Self.cornerRadius)
         overlay = DimOverlay(color: theme.unfocusedSplitFill, cornerRadius: Self.cornerRadius)
         super.init(frame: .zero)
@@ -31,9 +31,9 @@ final class PaneView: NSView {
         addSubview(glass)
 
         // Sized in layout().
-        terminal.translatesAutoresizingMaskIntoConstraints = true
-        terminal.autoresizingMask = []
-        card.addSubview(terminal)
+        pane.translatesAutoresizingMaskIntoConstraints = true
+        pane.autoresizingMask = []
+        card.addSubview(pane)
 
         overlay.isHidden = true
         addSubview(overlay)
@@ -52,14 +52,14 @@ final class PaneView: NSView {
         glass.frame = bounds
         card.frame = glass.bounds
         overlay.frame = bounds
-        terminal.frame = card.bounds
+        pane.frame = card.bounds
     }
 
     // MARK: Mouse
 
     /// Clicking the card's margin focuses the pane.
     override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(terminal)
+        window?.makeFirstResponder(pane)
     }
 
     override var mouseDownCanMoveWindow: Bool { false }
@@ -146,9 +146,7 @@ final class SplitContainerView: NSView {
 
     override func layout() {
         super.layout()
-        let (a, b) = childFrames
-        first.frame = a
-        second.frame = b
+        (first.frame, second.frame) = childFrames
         window?.invalidateCursorRects(for: self)
     }
 

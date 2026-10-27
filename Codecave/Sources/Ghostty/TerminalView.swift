@@ -11,9 +11,12 @@ struct SurfaceOptions {
 
     init() {}
 
-    init(inheriting view: TerminalView?, context: ghostty_surface_context_e) {
+    init(inheriting pane: (any Pane)?, context: ghostty_surface_context_e) {
         self.context = context
-        guard let surface = view?.surface else { return }
+        guard let surface = (pane as? TerminalView)?.surface else {
+            workingDirectory = pane?.pwd
+            return
+        }
         let inherited = ghostty_surface_inherited_config(surface, context)
         workingDirectory = inherited.working_directory.map { String(cString: $0) }
         fontSize = inherited.font_size
@@ -35,18 +38,7 @@ enum TerminalCommand {
     case resizeSplit(ghostty_action_resize_split_s)
     case equalizeSplits
     case toggleSplitZoom
-}
-
-protocol TerminalViewDelegate: AnyObject {
-    /// Title, working directory or bell state changed.
-    func terminalDidUpdate(_ terminal: TerminalView)
-    /// The terminal became first responder (e.g. clicked or navigated to).
-    func terminalDidFocus(_ terminal: TerminalView)
-    /// The shell exited or `close_surface` ran. `confirm` is true if a
-    /// process is still running.
-    func terminalDidRequestClose(_ terminal: TerminalView, confirm: Bool)
-    /// Returns false if the command isn't supported.
-    func terminal(_ terminal: TerminalView, perform command: TerminalCommand) -> Bool
+    case openURL(URL)
 }
 
 /// An NSView hosting a single libghostty surface. libghostty installs its
@@ -55,16 +47,16 @@ protocol TerminalViewDelegate: AnyObject {
 ///
 /// Input handling follows Ghostty's SurfaceView_AppKit.swift closely
 /// since it encodes a lot of hard-won AppKit knowledge.
-final class TerminalView: NSView {
+final class TerminalView: NSView, Pane {
     private(set) var surface: ghostty_surface_t?
 
-    weak var delegate: TerminalViewDelegate?
+    weak var delegate: PaneDelegate?
 
-    var title = "" { didSet { delegate?.terminalDidUpdate(self) } }
-    var pwd: String? { didSet { delegate?.terminalDidUpdate(self) } }
+    var title = "" { didSet { delegate?.paneDidUpdate(self) } }
+    var pwd: String? { didSet { delegate?.paneDidUpdate(self) } }
     /// Set when the terminal rings the bell, cleared once it has focus.
     var bell = false {
-        didSet { if bell != oldValue { delegate?.terminalDidUpdate(self) } }
+        didSet { if bell != oldValue { delegate?.paneDidUpdate(self) } }
     }
     var cellSize: NSSize = .zero
 
@@ -132,6 +124,12 @@ final class TerminalView: NSView {
         from(userdata: ghostty_surface_userdata(surface))
     }
 
+    /// The working directory's folder name.
+    var tabTitle: String {
+        guard let pwd else { return "Terminal" }
+        return pwd == NSHomeDirectory() ? "~" : (pwd as NSString).lastPathComponent
+    }
+
     var needsConfirmQuit: Bool {
         guard let surface else { return false }
         return ghostty_surface_needs_confirm_quit(surface)
@@ -145,7 +143,7 @@ final class TerminalView: NSView {
     }
 
     func requestClose(confirm: Bool) {
-        delegate?.terminalDidRequestClose(self, confirm: confirm)
+        delegate?.paneDidRequestClose(self, confirm: confirm)
     }
 
     // MARK: Size, scale, display
@@ -239,7 +237,7 @@ final class TerminalView: NSView {
         ghostty_surface_set_focus(surface, value)
         if value {
             bell = false
-            delegate?.terminalDidFocus(self)
+            delegate?.paneDidFocus(self)
         }
     }
 
