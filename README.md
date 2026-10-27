@@ -26,6 +26,10 @@ A pane can also show a web page: `⌘`-click a link in the terminal, or
 the right. `⌘R` reloads it. The split keybinds keep working there: the
 View menu takes their shortcuts from your Ghostty config.
 
+Each tab shows an icon: the running program's (Neovim, Rust, Pi, Claude,
+Codex, lazygit, ...; see `AppIcons.swift`), a web page's favicon, or a
+terminal.
+
 Codecave adds `⌘B` (toggle sidebar), `⌘S` (focus the tab list) and `⌘⇧E`
 (focus the changes). `⇥` switches between the two in the sidebar. In
 the tab list:
@@ -86,6 +90,7 @@ make run       # generates the Xcode project, builds and opens the app
   panes) and the sidebar
   (tab list and file tree).
 - `Codecave/Resources/FileIcons`: file type icons.
+- `Codecave/Resources/AppIcons`: program icons for the tab list.
 
 ## Debug snapshot
 

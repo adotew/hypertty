@@ -509,6 +509,7 @@ extension WorkspaceWindowController: ChangesDelegate {
         var options = SurfaceOptions(inheriting: tab.focused, context: context)
         options.workingDirectory = (changes.root ?? url.deletingLastPathComponent()).path
         options.command = EditorCommand.open(url)
+        options.title = EditorCommand.name
 
         if inNewTab {
             addTab(options: options)
@@ -528,6 +529,13 @@ extension WorkspaceWindowController: ChangesDelegate {
 /// started from an interactive login shell so it gets your PATH and
 /// environment.
 enum EditorCommand {
+    /// The editor's program name. EDITOR is usually only set in the shell
+    /// config, which the app doesn't see, so this is mostly the default.
+    static var name: String {
+        let editor = ProcessInfo.processInfo.environment["EDITOR"]?.split(separator: " ").first
+        return editor.map { ($0 as NSString).lastPathComponent } ?? "nvim"
+    }
+
     static func open(_ url: URL) -> String {
         let shell = getpwuid(getuid()).flatMap { String(validatingCString: $0.pointee.pw_shell) } ?? "/bin/zsh"
         // eval so an EDITOR with arguments ("code -w") works.

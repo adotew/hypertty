@@ -32,6 +32,9 @@ targets:
       - path: Codecave/Resources/FileIcons
         type: folder
         buildPhase: resources
+      - path: Codecave/Resources/AppIcons
+        type: folder
+        buildPhase: resources
     dependencies:
       - framework: vendor/ghostty/macos/GhosttyKit.xcframework
         embed: false

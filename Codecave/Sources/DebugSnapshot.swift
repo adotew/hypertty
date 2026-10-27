@@ -124,7 +124,7 @@ enum DebugSnapshot {
                 let size = terminal.surface.map(ghostty_surface_size)
                 report += " \(terminal === tab.focused ? "*" : " ") \(Int(frame.minX)),\(Int(frame.minY))"
                 report += " \(Int(frame.width))x\(Int(frame.height)) grid \(size?.columns ?? 0)x\(size?.rows ?? 0)"
-                report += " first responder: \(terminal.window?.firstResponder === terminal)"
+                report += " title: \"\(terminal.title)\" first responder: \(terminal.window?.firstResponder === terminal)"
                 report += " dimmed: \(enclosingPane(terminal)?.dimmed ?? false)\n"
             }
             if let surface = (tab.focused as? TerminalView)?.surface {

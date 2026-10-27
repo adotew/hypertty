@@ -8,6 +8,8 @@ struct SurfaceOptions {
     var context = GHOSTTY_SURFACE_CONTEXT_WINDOW
     /// Run instead of the shell; the pane closes when it exits.
     var command: String?
+    /// Shown until the program sets a title, e.g. the editor's name.
+    var title: String?
 
     init() {}
 
@@ -73,6 +75,9 @@ final class TerminalView: NSView, Pane {
     init(app: ghostty_app_t, options: SurfaceOptions = .init()) {
         // Non-zero so the renderer has something to work with before layout.
         super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+        // Until the shell reports them; a command may never do.
+        title = options.title ?? ""
+        pwd = options.workingDirectory
 
         var config = ghostty_surface_config_new()
         config.platform_tag = GHOSTTY_PLATFORM_MACOS
@@ -130,7 +135,8 @@ final class TerminalView: NSView, Pane {
         return pwd == NSHomeDirectory() ? "~" : (pwd as NSString).lastPathComponent
     }
 
-    var tabIcon: NSImage { Self.icon }
+    /// The running program's icon, else a terminal.
+    var tabIcon: NSImage { AppIcons.image(forTitle: title) ?? Self.icon }
 
     private static let icon = NSImage(systemSymbolName: "apple.terminal", accessibilityDescription: "Terminal") ?? NSImage()
 
