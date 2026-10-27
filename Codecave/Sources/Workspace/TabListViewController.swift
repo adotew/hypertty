@@ -292,6 +292,7 @@ final class TabCellView: NSTableCellView {
     func configure(tab: Tab, selected: Bool) {
         titleField.stringValue = tab.title
         icon.image = tab.icon
+        icon.hasBackground = !(tab.focused is WebPaneView)
         bellDot.isHidden = !tab.hasBell || selected
     }
 }
@@ -301,6 +302,10 @@ final class TabCellView: NSTableCellView {
 /// DebugSnapshot's captures.
 final class IconTileView: NSView {
     var image: NSImage? {
+        didSet { needsDisplay = true }
+    }
+
+    var hasBackground = true {
         didSet { needsDisplay = true }
     }
 
@@ -316,6 +321,14 @@ final class IconTileView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        guard hasBackground else {
+            if let image {
+                let glyph = fitted(image.size, in: bounds)
+                image.draw(in: glyph)
+            }
+            return
+        }
+
         // Room for the shadow, which falls downward.
         let tile = NSRect(x: 1, y: 1.5, width: bounds.width - 2, height: bounds.height - 2)
         let path = NSBezierPath(roundedRect: tile, xRadius: 5, yRadius: 5)
