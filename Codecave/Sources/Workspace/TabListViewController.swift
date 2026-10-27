@@ -235,6 +235,7 @@ extension TabListViewController: NSTextFieldDelegate {
 
 final class TabCellView: NSTableCellView {
     let titleField = NSTextField(labelWithString: "")
+    private let icon = NSImageView()
     private let bellDot = FillView(color: .clear)
     private let theme: Theme
 
@@ -249,6 +250,10 @@ final class TabCellView: NSTableCellView {
         titleField.cell?.truncatesLastVisibleLine = true
         titleField.focusRingType = .none
 
+        // Tints symbols; favicons keep their colors.
+        icon.contentTintColor = theme.secondaryText
+        icon.imageScaling = .scaleProportionallyUpOrDown
+
         bellDot.color = theme.accent
         bellDot.wantsLayer = true
         bellDot.layer?.cornerRadius = 3
@@ -258,7 +263,7 @@ final class TabCellView: NSTableCellView {
         titleField.setContentHuggingPriority(.init(1), for: .horizontal)
         titleField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        let row = NSStackView(views: [titleField, bellDot])
+        let row = NSStackView(views: [icon, titleField, bellDot])
         row.orientation = .horizontal
         row.distribution = .fill
         row.alignment = .centerY
@@ -270,6 +275,8 @@ final class TabCellView: NSTableCellView {
             row.leadingAnchor.constraint(equalTo: leadingAnchor),
             row.trailingAnchor.constraint(equalTo: trailingAnchor),
             row.centerYAnchor.constraint(equalTo: centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 16),
+            icon.heightAnchor.constraint(equalToConstant: 16),
             bellDot.widthAnchor.constraint(equalToConstant: 6),
             bellDot.heightAnchor.constraint(equalToConstant: 6),
         ])
@@ -287,6 +294,7 @@ final class TabCellView: NSTableCellView {
 
     func configure(tab: Tab, selected: Bool) {
         titleField.stringValue = tab.title
+        icon.image = tab.icon
         bellDot.isHidden = !tab.hasBell || selected
     }
 }

@@ -3,13 +3,15 @@ import WebKit
 
 /// A pane showing a web page, without browser chrome. Links that would
 /// open a new window load in place.
-final class WebPaneView: WKWebView, Pane, WKUIDelegate {
+final class WebPaneView: WKWebView, Pane, WKUIDelegate, WKNavigationDelegate {
     weak var delegate: PaneDelegate?
     let pwd: String?
     var bell = false
     var needsConfirmQuit: Bool { false }
 
     private var titleObservation: NSKeyValueObservation?
+    private var favicon: NSImage?
+    private var faviconURL: URL?
 
     /// `dark` sets the page's prefers-color-scheme.
     init(url: URL, pwd: String?, dark: Bool) {
@@ -21,6 +23,7 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate {
         configuration.applicationNameForUserAgent = "Version/\(version).0 Safari/605.1.15"
         super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600), configuration: configuration)
         uiDelegate = self
+        navigationDelegate = self
         appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         // The pane card is rounded; keep the page inside it.
         wantsLayer = true
@@ -41,6 +44,10 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate {
         return url?.host() ?? "Web"
     }
 
+    var tabIcon: NSImage { favicon ?? Self.globe }
+
+    private static let globe = NSImage(systemSymbolName: "globe", accessibilityDescription: "Web page") ?? NSImage()
+
     func teardown() {
         titleObservation = nil
         stopLoading()
@@ -56,6 +63,31 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate {
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         load(navigationAction.request)
         return nil
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        loadFavicon()
+    }
+
+    /// The page's `<link rel="icon">`, else /favicon.ico.
+    private func loadFavicon() {
+        let script = """
+            (document.querySelector('link[rel~="icon"]') ?? document.querySelector('link[rel="apple-touch-icon"]'))?.href
+              ?? new URL('/favicon.ico', location.href).href
+            """
+        evaluateJavaScript(script) { [weak self] result, _ in
+            guard let self, let href = result as? String, let url = URL(string: href), url != faviconURL else { return }
+            faviconURL = url
+            URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+                let image = data.flatMap(NSImage.init(data:))
+                DispatchQueue.main.async { [weak self] in
+                    // A later navigation may have asked for another icon.
+                    guard let self, faviconURL == url else { return }
+                    favicon = image
+                    delegate?.paneDidUpdate(self)
+                }
+            }.resume()
+        }
     }
 
     /// "localhost:3000" -> http://localhost:3000, "example.com" -> https://example.com.

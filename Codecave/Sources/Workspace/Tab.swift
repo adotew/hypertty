@@ -36,6 +36,8 @@ final class Tab {
 
     var title: String { customTitle ?? focused.tabTitle }
 
+    var icon: NSImage { focused.tabIcon }
+
     var hasBell: Bool { panes.contains { $0.bell } }
 
     var paneCount: Int { panes.count }

@@ -7,6 +7,8 @@ protocol Pane: NSView {
     var pwd: String? { get }
     /// Shown in the sidebar and the window title.
     var tabTitle: String { get }
+    /// Shown left of the title in the sidebar.
+    var tabIcon: NSImage { get }
     var bell: Bool { get set }
     var needsConfirmQuit: Bool { get }
     func teardown()

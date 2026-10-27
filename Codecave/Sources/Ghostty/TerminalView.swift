@@ -130,6 +130,10 @@ final class TerminalView: NSView, Pane {
         return pwd == NSHomeDirectory() ? "~" : (pwd as NSString).lastPathComponent
     }
 
+    var tabIcon: NSImage { Self.icon }
+
+    private static let icon = NSImage(systemSymbolName: "apple.terminal", accessibilityDescription: "Terminal") ?? NSImage()
+
     var needsConfirmQuit: Bool {
         guard let surface else { return false }
         return ghostty_surface_needs_confirm_quit(surface)
