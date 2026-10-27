@@ -1,14 +1,11 @@
 import AppKit
 
-/// A pane drawn as a Liquid Glass card with the terminal inset inside it.
+/// A pane drawn as a Liquid Glass card with the terminal filling it.
 /// The card is filled with the terminal background so the two are one
 /// color; the glass provides the edge. Unfocused panes are dimmed per
 /// Ghostty's `unfocused-split-opacity` / `unfocused-split-fill`.
 final class PaneView: NSView {
     static let cornerRadius: CGFloat = 12
-    /// Terminal inset from the card's edges, on top of Ghostty's own
-    /// window-padding.
-    static let contentInset: CGFloat = 9
 
     let terminal: TerminalView
     private let glass = NSGlassEffectView()
@@ -55,8 +52,7 @@ final class PaneView: NSView {
         glass.frame = bounds
         card.frame = glass.bounds
         overlay.frame = bounds
-        let inset = Self.contentInset
-        terminal.frame = card.bounds.insetBy(dx: inset, dy: inset)
+        terminal.frame = card.bounds
     }
 
     // MARK: Mouse

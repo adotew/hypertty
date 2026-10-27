@@ -21,10 +21,10 @@ protocol TabListDelegate: AnyObject {
 ///   x          close tab
 ///   r          rename tab (empty name resets it)
 ///   l, ⏎, esc  back to the terminal
-///   ⇥          switch to the file tree
+///   ⇥          switch to the changes
 final class TabListViewController: NSViewController {
     weak var delegate: TabListDelegate?
-    /// ⇥ switches the sidebar to the file tree.
+    /// ⇥ switches to the changes.
     var onSwitchMode: (() -> Void)?
     let tableView = SidebarTableView()
 

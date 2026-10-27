@@ -2,8 +2,8 @@
 
 A keyboard-driven terminal workspace for macOS, built on libghostty.
 
-Currently: Ghostty terminals in vertical tabs and splits, plus a file
-tree, using your Ghostty config (`~/.config/ghostty/config`), themes,
+Currently: Ghostty terminals in vertical tabs and splits, plus the git
+changes of the current project, using your Ghostty config (`~/.config/ghostty/config`), themes,
 shaders and keybinds.
 
 ## Keys
@@ -22,7 +22,7 @@ with your terminal `background`. `unfocused-split-opacity` and
 `unfocused-split-fill` dim unfocused panes.
 
 Codecave adds `⌘B` (toggle sidebar), `⌘S` (focus the tab list) and `⌘⇧E`
-(focus the file tree). `⇥` switches between the two in the sidebar. In
+(focus the changes). `⇥` switches between the two in the sidebar. In
 the tab list:
 
 | key | action |
@@ -36,18 +36,18 @@ the tab list:
 | `r` | rename (empty resets to the shell title) |
 | `l`, `⏎`, `esc` | back to the terminal |
 
-The file tree shows the git work tree (or directory) of the focused pane,
-so it follows `cd` and pane switches. Git-ignored files are dimmed.
+The sidebar header shows the project (git work tree or directory) of the
+focused pane and its branch, so it follows `cd` and pane switches. Below
+the tabs, the changes list shows `git status`: staged files, then
+unstaged and untracked ones, updated as files change.
 
 | key | action |
 |---|---|
-| `j` / `k` | next / previous item |
-| `g` / `G` | first / last item |
-| `l`, `→` | expand folder / open file |
-| `h`, `←` | collapse folder / go to parent |
-| `⏎` | toggle folder / open file in a split to the right |
-| `t` | open file in a new tab |
-| `.` | show / hide git-ignored files |
+| `j` / `k` | next / previous file |
+| `g` / `G` | first / last file |
+| `l`, `⏎` | open the file in a split to the right |
+| `t` | open the file in a new tab |
+| `s` | stage / unstage |
 | `y` | copy the path |
 | `esc` | back to the terminal |
 

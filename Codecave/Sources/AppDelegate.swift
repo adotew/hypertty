@@ -109,7 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
                          keyEquivalent: "b")
         viewMenu.addItem(withTitle: "Show Tabs", action: #selector(WorkspaceWindowController.focusTabSidebar(_:)),
                          keyEquivalent: "s")
-        viewMenu.addItem(withTitle: "Show Files", action: #selector(WorkspaceWindowController.focusFileSidebar(_:)),
+        viewMenu.addItem(withTitle: "Show Changes", action: #selector(WorkspaceWindowController.focusChangesSidebar(_:)),
                          keyEquivalent: "E")
         viewMenu.addItem(withTitle: "Rename Tab…", action: #selector(WorkspaceWindowController.renameTab(_:)),
                          keyEquivalent: "")

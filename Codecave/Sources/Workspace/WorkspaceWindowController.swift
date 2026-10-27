@@ -48,7 +48,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: window)
         window.delegate = self
         sidebar.tabList.delegate = self
-        sidebar.fileTree.delegate = self
+        sidebar.changes.delegate = self
 
         // Sidebar and pane gaps share one background, so hide the divider.
         let splitView = ThemedSplitView(dividerColor: .clear)
@@ -57,7 +57,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         splitViewController.splitView = splitView
 
         sidebarItem.canCollapse = true
-        // Fits the traffic lights and the Tabs / Files header.
+        // Fits the traffic lights and the project header.
         sidebarItem.minimumThickness = 200
         sidebarItem.maximumThickness = 420
         // Window resizes go to the terminal, not the sidebar.
@@ -122,15 +122,15 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         content.show(tab.view)
         window?.title = tab.title
         sidebar.update(tabs: tabs, selectedIndex: selectedIndex)
-        updateFileTree()
+        updateChanges()
         if focus { focusTerminal() }
     }
 
-    /// The file tree shows the project of the selected tab's focused pane.
+    /// The changes list shows the project of the selected tab's focused pane.
     /// Panes that don't report a directory (an editor) keep the current one.
-    private func updateFileTree() {
+    private func updateChanges() {
         guard let pwd = selectedTab?.focused.pwd else { return }
-        sidebar.fileTree.setDirectory(pwd)
+        sidebar.changes.setDirectory(pwd)
     }
 
     /// Asks for confirmation if any of the tabs is running a process.
@@ -262,9 +262,9 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         focusSidebar(.tabs)
     }
 
-    /// Moves keyboard focus to the file tree, or back to the terminal.
-    @objc func focusFileSidebar(_ sender: Any?) {
-        focusSidebar(.files)
+    /// Moves keyboard focus to the git changes, or back to the terminal.
+    @objc func focusChangesSidebar(_ sender: Any?) {
+        focusSidebar(.changes)
     }
 
     private func focusSidebar(_ mode: SidebarViewController.Mode) {
@@ -273,8 +273,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
             return
         }
         revealSidebar()
-        sidebar.show(mode)
-        sidebar.focus()
+        sidebar.focus(mode)
     }
 
     // Split menu items act on the selected tab's focused pane, e.g. while
@@ -357,7 +356,7 @@ extension WorkspaceWindowController: TerminalViewDelegate {
         guard let tab = tab(for: terminal) else { return }
         if tab === selectedTab {
             window?.title = tab.title
-            updateFileTree()
+            updateChanges()
         }
         sidebar.refresh(tab: tab)
     }
@@ -367,7 +366,7 @@ extension WorkspaceWindowController: TerminalViewDelegate {
         tab.focusDidChange(to: terminal)
         if tab === selectedTab {
             window?.title = tab.title
-            updateFileTree()
+            updateChanges()
         }
         sidebar.refresh(tab: tab)
     }
@@ -474,16 +473,16 @@ extension WorkspaceWindowController: TabListDelegate {
     }
 }
 
-// MARK: - FileTreeDelegate
+// MARK: - ChangesDelegate
 
-extension WorkspaceWindowController: FileTreeDelegate {
+extension WorkspaceWindowController: ChangesDelegate {
     /// Opens the file in your editor, in a split right of the focused pane
     /// or in a new tab, working in the project root.
-    func fileTree(_ tree: FileTreeViewController, open url: URL, inNewTab: Bool) {
+    func changes(_ changes: ChangesViewController, open url: URL, inNewTab: Bool) {
         guard let tab = selectedTab else { return }
         let context = inNewTab ? GHOSTTY_SURFACE_CONTEXT_TAB : GHOSTTY_SURFACE_CONTEXT_SPLIT
         var options = SurfaceOptions(inheriting: tab.focused, context: context)
-        options.workingDirectory = (tree.root ?? url.deletingLastPathComponent()).path
+        options.workingDirectory = (changes.root ?? url.deletingLastPathComponent()).path
         options.command = EditorCommand.open(url)
 
         if inNewTab {
@@ -495,7 +494,7 @@ extension WorkspaceWindowController: FileTreeDelegate {
         }
     }
 
-    func fileTreeFocusTerminal(_ tree: FileTreeViewController) {
+    func changesFocusTerminal(_ changes: ChangesViewController) {
         focusTerminal()
     }
 }

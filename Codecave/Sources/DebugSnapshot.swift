@@ -157,20 +157,13 @@ enum DebugSnapshot {
 
 #if DEBUG
 extension WorkspaceWindowController {
-    /// Sidebar mode and the file tree's visible rows.
+    /// Sidebar focus and the changes list.
     var sidebarReport: String {
         var report = "sidebar: \(sidebar.mode) focus: \(sidebar.hasFocus)\n"
-        let tree = sidebar.fileTree
-        report += "file tree: \(tree.root?.path ?? "-")\n"
-        guard sidebar.mode == .files else { return report }
-        let outline = tree.outlineView
-        for row in 0..<outline.numberOfRows {
-            guard let node = outline.item(atRow: row) as? FileNode else { continue }
-            let indent = String(repeating: "  ", count: outline.level(forItem: node))
-            let marker = node.isDirectory ? (outline.isItemExpanded(node) ? "v " : "> ") : "  "
-            let icon = node.isDirectory ? "" : " [\(FileIcons.iconName(for: node.url.lastPathComponent))]"
-            report += " \(outline.selectedRow == row ? "*" : " ")\(indent)\(marker)\(node.name)\(icon)"
-            report += node.isIgnored ? " (ignored)\n" : "\n"
+        let changes = sidebar.changes
+        report += "changes: \(changes.root?.path ?? "-") branch: \(changes.status?.branch ?? "-")\n"
+        for change in changes.status?.changes ?? [] {
+            report += "  \(change.staged ? "staged" : "      ") \(change.status) \(change.path)\n"
         }
         return report
     }

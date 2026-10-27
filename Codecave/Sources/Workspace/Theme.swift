@@ -7,6 +7,10 @@ struct Theme {
     let foreground: NSColor
     /// Palette color 4 (blue), used to mark the focused sidebar.
     let accent: NSColor
+    /// Palette colors 2, 3 and 1 (green, yellow, red), for git status.
+    let added: NSColor
+    let modified: NSColor
+    let deleted: NSColor
     /// Drawn over unfocused split panes.
     let unfocusedSplitFill: NSColor
 
@@ -14,6 +18,9 @@ struct Theme {
         background = runtime.configColor("background") ?? .black
         foreground = runtime.configColor("foreground") ?? .white
         accent = runtime.paletteColor(4) ?? .controlAccentColor
+        added = runtime.paletteColor(2) ?? .systemGreen
+        modified = runtime.paletteColor(3) ?? .systemYellow
+        deleted = runtime.paletteColor(1) ?? .systemRed
 
         // Same defaults and clamping as Ghostty.
         let opacity = min(1, max(0.15, runtime.configDouble("unfocused-split-opacity") ?? 0.7))
