@@ -163,15 +163,9 @@ enum DebugSnapshot {
 
 #if DEBUG
 extension WorkspaceWindowController {
-    /// Sidebar focus and the changes list.
+    /// Sidebar focus.
     var sidebarReport: String {
-        var report = "sidebar: \(sidebar.mode) focus: \(sidebar.hasFocus)\n"
-        let changes = sidebar.changes
-        report += "changes: \(changes.root?.path ?? "-") branch: \(changes.status?.branch ?? "-")\n"
-        for change in changes.status?.changes ?? [] {
-            report += "  \(change.staged ? "staged" : "      ") \(change.status) \(change.path)\n"
-        }
-        return report
+        "sidebar focus: \(sidebar.hasFocus)\n"
     }
 }
 #endif

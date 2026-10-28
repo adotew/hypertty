@@ -1,11 +1,17 @@
 # GhosttyKit (libghostty) is built from the pinned vendor/ghostty submodule.
 # The Xcode project is generated from project.yml with XcodeGen.
 
+# Debug for development, Release for a build to actually use or ship.
+# Override per invocation with `make app CONFIG=Release`, or use the
+# `release` / `run-release` targets.
+CONFIG ?= Debug
+
 DERIVED := build
-APP := $(DERIVED)/Build/Products/Debug/Codecave.app
+# Recursive so it picks up the configuration of the target being built.
+APP = $(DERIVED)/Build/Products/$(CONFIG)/Codecave.app
 GHOSTTYKIT := vendor/ghostty/macos/GhosttyKit.xcframework
 
-.PHONY: all ghostty project app run clean
+.PHONY: all ghostty project app release run run-release clean
 
 all: app
 
@@ -21,11 +27,18 @@ project:
 	xcodegen generate --quiet --use-cache
 
 app: $(GHOSTTYKIT) project
-	xcodebuild -project Codecave.xcodeproj -scheme Codecave -configuration Debug \
+	xcodebuild -project Codecave.xcodeproj -scheme Codecave -configuration $(CONFIG) \
 		-derivedDataPath $(DERIVED) -quiet build
+
+release: CONFIG := Release
+release: app
+	@echo "Built $(APP)"
 
 run: app
 	open $(APP)
+
+run-release: CONFIG := Release
+run-release: run
 
 clean:
 	rm -rf $(DERIVED) Codecave.xcodeproj

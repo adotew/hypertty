@@ -21,11 +21,8 @@ protocol TabListDelegate: AnyObject {
 ///   x          close tab
 ///   r          rename tab (empty name resets it)
 ///   l, ⏎, esc  back to the terminal
-///   ⇥          switch to the changes
 final class TabListViewController: NSViewController {
     weak var delegate: TabListDelegate?
-    /// ⇥ switches to the changes.
-    var onSwitchMode: (() -> Void)?
     let tableView = SidebarTableView()
 
     private let theme: Theme
@@ -134,9 +131,6 @@ final class TabListViewController: NSViewController {
         switch event.keyCode {
         case 36, 76, 53: // return, enter, escape
             delegate?.tabListFocusTerminal(self)
-            return true
-        case 48: // tab
-            onSwitchMode?()
             return true
         default:
             break

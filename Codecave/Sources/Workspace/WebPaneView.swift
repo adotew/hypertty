@@ -90,12 +90,19 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate, WKNavigationDelegate {
         }
     }
 
-    /// "localhost:3000" -> http://localhost:3000, "example.com" -> https://example.com.
+    /// "localhost:3000" -> http://localhost:3000, "example.com" -> https://example.com,
+    /// anything else -> Google search.
     static func url(from input: String) -> URL? {
-        let text = input.trimmingCharacters(in: .whitespaces)
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
         if text.contains("://") { return URL(string: text) }
-        let local = text.hasPrefix("localhost") || text.first?.isNumber == true
-        return URL(string: (local ? "http://" : "https://") + text)
+        let host = text.prefix { !"/?#".contains($0) }
+        let hostName = host.split(separator: ":", maxSplits: 1)[0]
+        let local = hostName == "localhost" || hostName.allSatisfy { $0.isNumber || $0 == "." }
+        let isURL = !text.contains(" ") && (local || hostName.contains(".") || host.contains(":"))
+        if isURL, let url = URL(string: (local ? "http://" : "https://") + text) { return url }
+        var search = URLComponents(string: "https://www.google.com/search")
+        search?.queryItems = [URLQueryItem(name: "q", value: text)]
+        return search?.url
     }
 }

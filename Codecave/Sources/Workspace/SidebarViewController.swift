@@ -1,25 +1,16 @@
 import AppKit
 
-/// The window's sidebar: the tab list above the git changes. ⌘S focuses the tabs, ⌘⇧E the changes;
-/// ⇥ switches between them.
+/// The window's sidebar tab list.
 final class SidebarViewController: NSViewController {
-    enum Mode { case tabs, changes }
-
     let tabList: TabListViewController
-    let changes: ChangesViewController
-    /// The list that has, or last had, keyboard focus.
-    private(set) var mode: Mode = .tabs
 
-    private let theme: Theme
     private var tabListHeight: NSLayoutConstraint!
 
     /// Clears the traffic lights (14pt buttons 9pt from the top).
     private static let topInset: CGFloat = 34
 
     init(theme: Theme) {
-        self.theme = theme
         tabList = TabListViewController(theme: theme)
-        changes = ChangesViewController(theme: theme)
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -33,28 +24,18 @@ final class SidebarViewController: NSViewController {
         let root = NSView()
         root.frame = NSRect(x: 0, y: 0, width: 220, height: 600)
 
-        tabList.onSwitchMode = { [weak self] in self?.focus(.changes) }
-        changes.onSwitchMode = { [weak self] in self?.focus(.tabs) }
-
         addChild(tabList)
-        addChild(changes)
-        for view in [tabList.view, changes.view] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            root.addSubview(view)
-            NSLayoutConstraint.activate([
-                view.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 8),
-                view.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
-            ])
-        }
-        // The tab list is as tall as its rows, up to half the sidebar.
+        let listView = tabList.view
+        listView.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(listView)
         tabListHeight = tabList.view.heightAnchor.constraint(equalToConstant: 0)
         tabListHeight.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            tabList.view.topAnchor.constraint(equalTo: root.topAnchor, constant: Self.topInset),
+            listView.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 8),
+            listView.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -8),
+            listView.topAnchor.constraint(equalTo: root.topAnchor, constant: Self.topInset),
             tabListHeight,
-            tabList.view.heightAnchor.constraint(lessThanOrEqualTo: root.heightAnchor, multiplier: 0.5),
-            changes.view.topAnchor.constraint(equalTo: tabList.view.bottomAnchor, constant: 6),
-            changes.view.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -8),
+            listView.bottomAnchor.constraint(lessThanOrEqualTo: root.bottomAnchor, constant: -8),
         ])
 
         view = root
@@ -72,25 +53,16 @@ final class SidebarViewController: NSViewController {
         tabList.refresh(tab: tab)
     }
 
-    func beginRename(at row: Int) {
-        mode = .tabs
-        tabList.beginRename(at: row)
-    }
+    func beginRename(at row: Int) { tabList.beginRename(at: row) }
 
     // MARK: Focus
 
-    var hasFocus: Bool { tabList.hasFocus || changes.hasFocus }
+    var hasFocus: Bool { tabList.hasFocus }
 
-    func focus(_ mode: Mode) {
-        self.mode = mode
-        switch mode {
-        case .tabs: tabList.focus()
-        case .changes: changes.focus()
-        }
-    }
+    func focus() { tabList.focus() }
 }
 
-// MARK: - Views shared by the tab list and the changes
+// MARK: - Views shared by sidebar lists
 
 /// A transparent, overlay-scrolling container for a sidebar list.
 final class SidebarScrollView: NSScrollView {

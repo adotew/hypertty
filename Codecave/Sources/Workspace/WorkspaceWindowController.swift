@@ -47,9 +47,13 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         window.minSize = NSSize(width: 480, height: 240)
 
         super.init(window: window)
+        content.onAddressSubmit = { [weak self] text in
+            guard let webPane = self?.selectedTab?.focused as? WebPaneView,
+                  let url = WebPaneView.url(from: text) else { return }
+            webPane.load(URLRequest(url: url))
+        }
         window.delegate = self
         sidebar.tabList.delegate = self
-        sidebar.changes.delegate = self
 
         // Sidebar and pane gaps share one background, so hide the divider.
         let splitView = ThemedSplitView(dividerColor: .clear)
@@ -120,18 +124,10 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
 
     func select(_ tab: Tab, focus: Bool = true) {
         selectedTab = tab
-        content.show(tab.view)
+        content.show(tab.view, webPane: tab.focused as? WebPaneView)
         window?.title = tab.title
         sidebar.update(tabs: tabs, selectedIndex: selectedIndex)
-        updateChanges()
         if focus { focusTerminal() }
-    }
-
-    /// The changes list shows the project of the selected tab's focused pane.
-    /// Panes that don't report a directory (an editor) keep the current one.
-    private func updateChanges() {
-        guard let pwd = selectedTab?.focused.pwd else { return }
-        sidebar.changes.setDirectory(pwd)
     }
 
     /// Asks for confirmation if any of the tabs is running a process.
@@ -260,21 +256,16 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
 
     /// Moves keyboard focus to the tab list, or back to the terminal.
     @objc func focusTabSidebar(_ sender: Any?) {
-        focusSidebar(.tabs)
+        focusSidebar()
     }
 
-    /// Moves keyboard focus to the git changes, or back to the terminal.
-    @objc func focusChangesSidebar(_ sender: Any?) {
-        focusSidebar(.changes)
-    }
-
-    private func focusSidebar(_ mode: SidebarViewController.Mode) {
-        if sidebar.hasFocus && sidebar.mode == mode {
+    private func focusSidebar() {
+        if sidebar.hasFocus {
             focusTerminal()
             return
         }
         revealSidebar()
-        sidebar.focus(mode)
+        sidebar.focus()
     }
 
     // Split menu items act on the selected tab's focused pane, e.g. while
@@ -377,8 +368,8 @@ extension WorkspaceWindowController: PaneDelegate {
     func paneDidUpdate(_ pane: any Pane) {
         guard let tab = tab(for: pane) else { return }
         if tab === selectedTab {
+            content.show(tab.view, webPane: tab.focused as? WebPaneView)
             window?.title = tab.title
-            updateChanges()
         }
         sidebar.refresh(tab: tab)
     }
@@ -387,8 +378,8 @@ extension WorkspaceWindowController: PaneDelegate {
         guard let tab = tab(for: pane) else { return }
         tab.focusDidChange(to: pane)
         if tab === selectedTab {
+            content.show(tab.view, webPane: pane as? WebPaneView)
             window?.title = tab.title
-            updateChanges()
         }
         sidebar.refresh(tab: tab)
     }
@@ -498,57 +489,6 @@ extension WorkspaceWindowController: TabListDelegate {
     }
 }
 
-// MARK: - ChangesDelegate
-
-extension WorkspaceWindowController: ChangesDelegate {
-    /// Opens the file in your editor, in a split right of the focused pane
-    /// or in a new tab, working in the project root.
-    func changes(_ changes: ChangesViewController, open url: URL, inNewTab: Bool) {
-        guard let tab = selectedTab else { return }
-        let context = inNewTab ? GHOSTTY_SURFACE_CONTEXT_TAB : GHOSTTY_SURFACE_CONTEXT_SPLIT
-        var options = SurfaceOptions(inheriting: tab.focused, context: context)
-        options.workingDirectory = (changes.root ?? url.deletingLastPathComponent()).path
-        options.command = EditorCommand.open(url)
-        options.title = EditorCommand.name
-
-        if inNewTab {
-            addTab(options: options)
-        } else if let terminal = makeTerminal(options) {
-            tab.split(tab.focused, adding: terminal, direction: GHOSTTY_SPLIT_DIRECTION_RIGHT)
-            window?.makeFirstResponder(terminal)
-            focusTerminal()
-        }
-    }
-
-    func changesFocusTerminal(_ changes: ChangesViewController) {
-        focusTerminal()
-    }
-}
-
-/// The command a pane runs to edit a file: `$EDITOR` (nvim if unset),
-/// started from an interactive login shell so it gets your PATH and
-/// environment.
-enum EditorCommand {
-    /// The editor's program name. EDITOR is usually only set in the shell
-    /// config, which the app doesn't see, so this is mostly the default.
-    static var name: String {
-        let editor = ProcessInfo.processInfo.environment["EDITOR"]?.split(separator: " ").first
-        return editor.map { ($0 as NSString).lastPathComponent } ?? "nvim"
-    }
-
-    static func open(_ url: URL) -> String {
-        let shell = getpwuid(getuid()).flatMap { String(validatingCString: $0.pointee.pw_shell) } ?? "/bin/zsh"
-        // eval so an EDITOR with arguments ("code -w") works.
-        let script = #"eval "exec ${EDITOR:-nvim} \"\$1\"""#
-        return [shell, "-l", "-i", "-c", script, "codecave", url.path].map(quoted).joined(separator: " ")
-    }
-
-    /// Single-quotes for /bin/sh.
-    private static func quoted(_ string: String) -> String {
-        "'" + string.replacingOccurrences(of: "'", with: #"'''"#) + "'"
-    }
-}
-
 // MARK: - Views
 
 /// Shows the selected tab's view, inset so pane cards float on the window
@@ -559,6 +499,8 @@ final class TabContainerViewController: NSViewController {
 
     private var shown: NSView?
     private var topConstraint: NSLayoutConstraint?
+    private let addressField = NSTextField()
+    var onAddressSubmit: ((String) -> Void)?
     /// With the sidebar hidden, the traffic lights sit over the content,
     /// so the cards start below the titlebar.
     var clearsTitlebar = false {
@@ -566,30 +508,54 @@ final class TabContainerViewController: NSViewController {
     }
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+        addressField.placeholderString = "Enter web address"
+        addressField.bezelStyle = .roundedBezel
+        addressField.isHidden = true
+        addressField.target = self
+        addressField.action = #selector(submitAddress)
+        addressField.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(addressField)
+        NSLayoutConstraint.activate([
+            addressField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Self.padding),
+            addressField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Self.padding),
+            addressField.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.padding),
+            addressField.heightAnchor.constraint(equalToConstant: 28),
+        ])
     }
 
-    func show(_ tabView: NSView) {
-        guard tabView !== shown else { return }
-        shown?.removeFromSuperview()
-        shown = tabView
+    func show(_ tabView: NSView, webPane: WebPaneView?) {
+        if tabView !== shown {
+            shown?.removeFromSuperview()
+            shown = tabView
 
-        tabView.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(tabView)
-        let padding = Self.padding
-        NSLayoutConstraint.activate([
-            tabView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -padding),
-            tabView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: padding),
-            tabView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -padding),
-        ])
+            tabView.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(tabView)
+            let padding = Self.padding
+            NSLayoutConstraint.activate([
+                tabView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -padding),
+                tabView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: padding),
+                tabView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -padding),
+            ])
+        }
+        addressField.isHidden = webPane == nil
+        addressField.stringValue = webPane?.url?.absoluteString ?? ""
         updateTopConstraint()
+    }
+
+    @objc private func submitAddress() {
+        onAddressSubmit?(addressField.stringValue)
     }
 
     private func updateTopConstraint() {
         guard let shown else { return }
         topConstraint?.isActive = false
-        topConstraint = clearsTitlebar
-            ? shown.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)
-            : shown.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.padding)
+        if !addressField.isHidden {
+            topConstraint = shown.topAnchor.constraint(equalTo: addressField.bottomAnchor, constant: Self.padding)
+        } else {
+            topConstraint = clearsTitlebar
+                ? shown.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)
+                : shown.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.padding)
+        }
         topConstraint?.isActive = true
     }
 }

@@ -13,7 +13,7 @@ enum AppIcons {
               let name = byCommand[word] else { return nil }
         if let image = cache[name] { return image }
         let url = Bundle.main.resourceURL?.appendingPathComponent("AppIcons/\(name).svg")
-        guard let svg = url.flatMap(NSImage.init(contentsOf:)) else { return nil }
+        guard let svg = symbols[name].flatMap(symbol) ?? url.flatMap(NSImage.init(contentsOf:)) else { return nil }
         let image: NSImage
         if fullColor.contains(name) {
             image = svg
@@ -34,13 +34,21 @@ enum AppIcons {
         return image
     }
 
+    private static func symbol(_ name: String) -> NSImage? {
+        NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+            .withSymbolConfiguration(.init(pointSize: 24, weight: .bold))
+    }
+
+    /// SF Symbols for programs whose logo doesn't read at tile size.
+    private static let symbols = ["git": "arrow.triangle.branch"]
+
     private static let byCommand: [String: String] = [
         "nvim": "neovim", "vim": "vim", "vi": "vim",
         "cargo": "rust", "rustc": "rust", "rustup": "rust", "rustlings": "rust",
         "pi": "pi", "π": "pi",
         "claude": "claude", "codex": "openai", "opencode": "opencode",
         "git": "git", "lazygit": "git", "gitui": "git", "gh": "github",
-        "npm": "npm", "npx": "npm", "node": "nodedotjs", "bun": "bun", "bunx": "bun",
+        "npm": "npm", "npx": "nodedotjs", "node": "nodedotjs", "bun": "bun", "bunx": "bun",
         "swift": "swift", "swiftc": "swift", "xcodebuild": "xcode", "xcrun": "xcode",
         "python": "python", "python3": "python", "uv": "uv", "uvx": "uv",
         "zig": "zig", "make": "make", "mvn": "apachemaven", "mvnw": "apachemaven",
@@ -53,7 +61,7 @@ enum AppIcons {
     /// Brand colors that read on dark and light sidebars; the others
     /// (black ones like Rust's) are tinted instead.
     private static let colors: [String: Int] = [
-        "vim": 0x019733, "claude": 0xD97757, "git": 0xF03C2E,
+        "vim": 0x019733, "claude": 0xD97757, "git": 0xF05032,
         "npm": 0xCB3837, "nodedotjs": 0x5FA04E, "swift": 0xF05138, "xcode": 0x147EFB,
         "python": 0xFFD43B, "uv": 0xDE5FE9, "zig": 0xF7A41D, "apachemaven": 0xC71A36,
         "flutter": 0x02569B, "tmux": 0x1BB91F, "htop": 0x009020,

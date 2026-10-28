@@ -53,7 +53,7 @@ unstaged and untracked ones, updated as files change.
 |---|---|
 | `j` / `k` | next / previous file |
 | `g` / `G` | first / last file |
-| `l`, `⏎` | open the file in a split to the right |
+| `l`, `⏎` | open the file in a split to the right, or collapse / expand a section (or click its title) |
 | `t` | open the file in a new tab |
 | `s` | stage / unstage |
 | `y` | copy the path |
@@ -76,6 +76,12 @@ git submodule update --init
 make ghostty   # builds GhosttyKit.xcframework (~5 min the first time)
 make run       # generates the Xcode project, builds and opens the app
 ```
+
+`make` builds Debug by default. For an optimized build, use
+`make release` (or `make run-release` to open it); the app lands in
+`build/Build/Products/Release/Codecave.app`. `make app CONFIG=Release`
+does the same without opening it. Debug-only extras (snapshot dumping,
+`CODECAVE_EXTRA_CONFIG`) are compiled out of release builds.
 
 ## Layout
 
