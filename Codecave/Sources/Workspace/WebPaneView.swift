@@ -34,7 +34,12 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate, WKNavigationDelegate {
         titleObservation = observe(\.title) { [weak self] view, _ in
             self?.delegate?.paneDidUpdate(view)
         }
-        load(URLRequest(url: url))
+        if url.isFileURL {
+            // shortcut: pages can read files beside them, not in parent folders.
+            loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        } else {
+            load(URLRequest(url: url))
+        }
     }
 
     required init?(coder: NSCoder) {
@@ -43,6 +48,7 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate, WKNavigationDelegate {
 
     var tabTitle: String {
         if let title, !title.isEmpty { return title }
+        if let url, url.isFileURL { return url.lastPathComponent }
         return url?.host() ?? "Web"
     }
 

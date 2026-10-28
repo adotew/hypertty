@@ -37,6 +37,9 @@ targets:
         buildPhase: resources
       - path: Codecave/Resources/defaults.ghostty
         buildPhase: resources
+      - path: Codecave/bin
+        type: folder
+        buildPhase: resources
     dependencies:
       - framework: vendor/ghostty/macos/GhosttyKit.xcframework
         embed: false

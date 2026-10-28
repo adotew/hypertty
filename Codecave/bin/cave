@@ -1,0 +1,17 @@
+#!/bin/sh
+# cave open <file.html|url>...: opens them in a split right of the focused
+# pane. Anything else goes to macOS's open, so aliasing `open` to this is safe.
+if [ "$1" != open ]; then
+    echo "usage: cave open <file|url>..." >&2
+    exit 64
+fi
+shift
+app=$(cd "$(dirname "$0")/../../.." && pwd)
+for arg; do
+    case $arg in
+        http://* | https://*) ;;
+        *.html | *.htm) [ -f "$arg" ] || exec /usr/bin/open "$@" ;;
+        *) exec /usr/bin/open "$@" ;;
+    esac
+done
+exec /usr/bin/open -a "$app" "$@"

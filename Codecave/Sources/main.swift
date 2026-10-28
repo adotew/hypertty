@@ -8,6 +8,11 @@ if let resources = Bundle.main.resourceURL?.appendingPathComponent("ghostty") {
     setenv("GHOSTTY_RESOURCES_DIR", resources.path, 1)
 }
 
+// The `cave` command, for shells in our terminals.
+if let bin = Bundle.main.resourceURL?.appendingPathComponent("bin") {
+    setenv("PATH", (ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin") + ":" + bin.path, 1)
+}
+
 if ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) != GHOSTTY_SUCCESS {
     fatalError("ghostty_init failed")
 }

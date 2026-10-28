@@ -346,6 +346,11 @@ extension WorkspaceWindowController: PaneDelegate {
         tabs.first { $0.root.contains(pane) }
     }
 
+    func openWebPane(_ url: URL) {
+        guard let pane = selectedTab?.focused else { return }
+        openWebPane(url, beside: pane)
+    }
+
     @discardableResult
     private func openWebPane(_ url: URL, beside pane: any Pane) -> WebPaneView? {
         guard let tab = tab(for: pane) else { return nil }

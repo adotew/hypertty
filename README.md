@@ -26,6 +26,14 @@ A pane can also show a web page: `⌘`-click a link in the terminal, or
 the right. `⌘R` reloads it. The split keybinds keep working there: the
 View menu takes their shortcuts from your Ghostty config.
 
+From the shell, `cave open index.html` (or a URL) opens it in a split
+to the right of the focused pane; anything else goes to macOS's `open`.
+To make plain `open` do this inside Codecave, add to your `~/.zshrc`:
+
+```sh
+(( $+commands[cave] )) && alias open='cave open'
+```
+
 Each tab shows an icon: the running program's (Neovim, Rust, Pi, Claude,
 Codex, lazygit, ...; see `AppIcons.swift`), a web page's favicon, or a
 terminal.

@@ -52,6 +52,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
         controller.show(cascadingFrom: parent?.window)
     }
 
+    /// `cave open`: web pages and HTML files open in a split, the rest in
+    /// their default app.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            let web = ["http", "https"].contains(url.scheme) || url.isFileURL && ["html", "htm"].contains(url.pathExtension)
+            // shortcut: opens beside the focused pane, not the one that ran the command;
+            // pass a pane id through the environment if that ever differs.
+            if web, let workspace = keyWorkspace ?? windows.last {
+                workspace.openWebPane(url)
+            } else {
+                NSWorkspace.shared.open(url)
+            }
+        }
+    }
+
     // MARK: GhosttyRuntimeDelegate
 
     func ghosttyNewWindow(inheriting parent: TerminalView?) {
