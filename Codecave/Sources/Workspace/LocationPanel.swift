@@ -47,7 +47,7 @@ final class LocationPanel: NSPanel, NSTextFieldDelegate {
 
     func show(over parent: NSWindow) {
         let width = min(Self.size.width, parent.frame.width - 80)
-        setFrame(NSRect(x: parent.frame.midX - width / 2, y: parent.frame.midY - Self.size.height / 2,
+        setFrame(NSRect(x: parent.frame.midX - width / 2, y: parent.frame.maxY - 100 - Self.size.height,
                         width: width, height: Self.size.height), display: false)
         parent.addChildWindow(self, ordered: .above)
         makeKeyAndOrderFront(nil)
