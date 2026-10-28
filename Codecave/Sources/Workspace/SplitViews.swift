@@ -19,6 +19,10 @@ final class PaneView: NSView {
 
     var dimColor: NSColor { overlay.color }
 
+    var freezesPane = false {
+        didSet { needsLayout = true }
+    }
+
     init(pane: any Pane, theme: Theme) {
         self.pane = pane
         card = CardContent(color: theme.background, radius: Self.cornerRadius)
@@ -33,6 +37,7 @@ final class PaneView: NSView {
         // Sized in layout().
         pane.translatesAutoresizingMaskIntoConstraints = true
         pane.autoresizingMask = []
+        card.clipsToBounds = true
         card.addSubview(pane)
 
         overlay.isHidden = true
@@ -52,7 +57,12 @@ final class PaneView: NSView {
         glass.frame = bounds
         card.frame = glass.bounds
         overlay.frame = bounds
-        pane.frame = card.bounds
+        if !freezesPane { pane.frame = card.bounds }
+    }
+
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        freezesPane = false
     }
 
     // MARK: Mouse
@@ -154,6 +164,9 @@ final class SplitContainerView: NSView {
 
     func animate(_ child: NSView, appearing: Bool, completion: (() -> Void)? = nil) {
         collapsingSecond = child === second
+        collapsed = appearing ? 0 : 1
+        layoutSubtreeIfNeeded()
+        setPanesFrozen(true)
         collapsed = appearing ? 1 : 0
         transition = Transition(start: CACurrentMediaTime(), from: collapsed, to: appearing ? 0 : 1,
                                 completion: completion)
@@ -172,7 +185,19 @@ final class SplitContainerView: NSView {
         link.invalidate()
         displayLink = nil
         self.transition = nil
+        setPanesFrozen(false)
         transition.completion?()
+    }
+
+    private func setPanesFrozen(_ frozen: Bool) {
+        var views: [NSView] = [self]
+        while let view = views.popLast() {
+            if let paneView = view as? PaneView {
+                paneView.freezesPane = frozen
+            } else {
+                views += view.subviews
+            }
+        }
     }
 
     // Top-left origin, matching SplitNode.frames.
