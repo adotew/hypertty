@@ -17,6 +17,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
 
     private let splitViewController = NSSplitViewController()
     private var locationPanel: LocationPanel?
+    private var commandPalette: CommandPalette?
     let sidebar: SidebarViewController
     private let content: TabContainerViewController
     private let sidebarItem: NSSplitViewItem
@@ -298,6 +299,19 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         panel.show(over: window)
     }
 
+    /// Cmd+Shift+P: lists the menu commands that can run right now. Pressing it
+    /// again closes the palette.
+    @objc func showCommandPalette(_ sender: Any?) {
+        guard let window else { return }
+        if let commandPalette, commandPalette.isVisible {
+            commandPalette.dismiss(refocusParent: true)
+            return
+        }
+        let palette = CommandPalette(commands: CommandPalette.menuCommands(in: NSApp.mainMenu), dark: theme.isDark)
+        commandPalette = palette
+        palette.show(over: window)
+    }
+
     @objc func renameTab(_ sender: Any?) {
         guard let index = selectedIndex else { return }
         renameReturnsToTerminal = !sidebar.hasFocus
@@ -442,6 +456,9 @@ extension WorkspaceWindowController: PaneDelegate {
         case .toggleSplitZoom:
             tab.toggleZoom()
             window?.makeFirstResponder(tab.focused)
+
+        case .commandPalette:
+            showCommandPalette(nil)
 
         case .openURL(let url):
             openWebPane(url, beside: pane)

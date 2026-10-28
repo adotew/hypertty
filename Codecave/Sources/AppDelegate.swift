@@ -115,6 +115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
                          keyEquivalent: "s")
         viewMenu.addItem(withTitle: "Rename Tab…", action: #selector(WorkspaceWindowController.renameTab(_:)),
                          keyEquivalent: "")
+        viewMenu.addItem(withTitle: "Command Palette",
+                         action: #selector(WorkspaceWindowController.showCommandPalette(_:)), keyEquivalent: "P")
         viewMenu.addItem(.separator())
         viewMenu.addItem(commandItem("Split Right", .newSplit(GHOSTTY_SPLIT_DIRECTION_RIGHT), action: "new_split:right"))
         viewMenu.addItem(commandItem("Split Down", .newSplit(GHOSTTY_SPLIT_DIRECTION_DOWN), action: "new_split:down"))

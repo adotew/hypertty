@@ -40,6 +40,7 @@ enum TerminalCommand {
     case resizeSplit(ghostty_action_resize_split_s)
     case equalizeSplits
     case toggleSplitZoom
+    case commandPalette
     case openURL(URL)
 }
 

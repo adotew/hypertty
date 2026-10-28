@@ -279,6 +279,9 @@ final class GhosttyRuntime {
         case GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
             return host(.toggleSplitZoom)
 
+        case GHOSTTY_ACTION_TOGGLE_COMMAND_PALETTE:
+            return host(.commandPalette)
+
         case GHOSTTY_ACTION_TOGGLE_FULLSCREEN:
             view?.window?.toggleFullScreen(nil)
 
