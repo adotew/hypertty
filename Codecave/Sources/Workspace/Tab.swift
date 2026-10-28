@@ -159,7 +159,10 @@ final class Tab {
     private func updateDimming() {
         let split = zoomed == nil && panes.count > 1
         for pane in panes {
-            view(for: pane).dimmed = split && pane !== focused
+            let view = view(for: pane)
+            // Web pages stay bright so they remain readable.
+            view.dimmed = split && pane !== focused && !(pane is WebPaneView)
+            view.outlined = split && pane === focused
         }
     }
 }

@@ -11,10 +11,16 @@ final class PaneView: NSView {
     private let glass = NSGlassEffectView()
     private let card: CardContent
     private let overlay: DimOverlay
+    private let outline: OutlineView
 
     /// Dims the card (unfocused pane in a split tab).
     var dimmed = false {
         didSet { overlay.isHidden = !dimmed }
+    }
+
+    /// Outlines the card (focused pane in a split tab).
+    var outlined = false {
+        didSet { outline.isHidden = !outlined }
     }
 
     var dimColor: NSColor { overlay.color }
@@ -30,6 +36,7 @@ final class PaneView: NSView {
         self.pane = pane
         card = CardContent(color: theme.background, radius: Self.cornerRadius)
         overlay = DimOverlay(color: theme.unfocusedSplitFill, cornerRadius: Self.cornerRadius)
+        outline = OutlineView(color: theme.foreground.withAlphaComponent(0.15), cornerRadius: Self.cornerRadius)
         super.init(frame: .zero)
 
         glass.cornerRadius = Self.cornerRadius
@@ -60,6 +67,10 @@ final class PaneView: NSView {
 
         overlay.isHidden = true
         addSubview(overlay)
+
+        // In the card: siblings of the glass view don't show above web panes.
+        outline.isHidden = true
+        card.addSubview(outline)
     }
 
     required init?(coder: NSCoder) {
@@ -75,6 +86,7 @@ final class PaneView: NSView {
         glass.frame = bounds
         card.frame = glass.bounds
         overlay.frame = bounds
+        outline.frame = card.bounds
         if !freezesPane { pane.frame = card.bounds }
         blankIcon.sizeToFit()
         blankIcon.frame.origin = NSPoint(x: card.bounds.midX - blankIcon.frame.width / 2,
@@ -137,6 +149,33 @@ private final class DimOverlay: NSView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not supported")
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+private final class OutlineView: NSView {
+    private static let width: CGFloat = 2
+
+    private let color: NSColor
+    private let radius: CGFloat
+
+    init(color: NSColor, cornerRadius: CGFloat) {
+        self.color = color
+        radius = cornerRadius
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let rect = bounds.insetBy(dx: Self.width / 2, dy: Self.width / 2)
+        let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
+        path.lineWidth = Self.width
+        color.setStroke()
+        path.stroke()
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
