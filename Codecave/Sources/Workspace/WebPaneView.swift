@@ -25,6 +25,12 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate, WKNavigationDelegate {
             configuration.userContentController.addUserScript(
                 WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: .defaultClient))
         }
+        // Hide scrollbars like the terminal; pages still scroll.
+        configuration.userContentController.addUserScript(WKUserScript(source: """
+            const style = document.createElement('style')
+            style.textContent = '* { scrollbar-width: none } ::-webkit-scrollbar { display: none }'
+            document.documentElement.append(style)
+            """, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .defaultClient))
         // Without Safari's token sites like Google serve a legacy fixed-width
         // layout. Safari's major version matches macOS's since macOS 26.
         let version = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
