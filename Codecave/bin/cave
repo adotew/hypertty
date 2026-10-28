@@ -1,17 +1,29 @@
 #!/bin/sh
-# cave open <file.html|url>...: opens them in a split right of the focused
-# pane. Anything else goes to macOS's open, so aliasing `open` to this is safe.
+# cave open [-i] <file.html|file.md|url>...: opens them in a split right of the
+# terminal that ran it, or with -i in its place (q or esc goes back). Anything
+# else, or outside Codecave, goes to macOS's open, so aliasing `open` is safe.
 if [ "$1" != open ]; then
-    echo "usage: cave open <file|url>..." >&2
+    echo "usage: cave open [-i] <file|url>..." >&2
     exit 64
 fi
 shift
-app=$(cd "$(dirname "$0")/../../.." && pwd)
+mode=split
+if [ "$1" = -i ]; then
+    mode=here
+    shift
+fi
+[ -S "$CODECAVE_SOCKET" ] || exec /usr/bin/open "$@"
 for arg; do
     case $arg in
         http://* | https://*) ;;
-        *.html | *.htm) [ -f "$arg" ] || exec /usr/bin/open "$@" ;;
+        *.html | *.htm | *.md | *.markdown) [ -f "$arg" ] || exec /usr/bin/open "$@" ;;
         *) exec /usr/bin/open "$@" ;;
     esac
 done
-exec /usr/bin/open -a "$app" "$@"
+for arg; do
+    case $arg in
+        http://* | https://* | /*) ;;
+        *) arg=$PWD/$arg ;;
+    esac
+    printf 'open\t%s\t%s\t%s\n' "$mode" "$CODECAVE_PANE" "$arg" | nc -U "$CODECAVE_SOCKET" >/dev/null
+done

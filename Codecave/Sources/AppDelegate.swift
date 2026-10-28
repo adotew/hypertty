@@ -4,8 +4,16 @@ import GhosttyKit
 final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate {
     private var runtime: GhosttyRuntime!
     private var windows: [WorkspaceWindowController] = []
+    private var caveServer: CaveServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        do {
+            let server = try CaveServer { [weak self] in self?.handleCave($0) }
+            setenv("CODECAVE_SOCKET", server.path, 1)
+            caveServer = server
+        } catch {
+            NSLog("cave server failed: \(error)")
+        }
         runtime = GhosttyRuntime()
         runtime.delegate = self
         NSApp.mainMenu = makeMainMenu()
@@ -28,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        caveServer?.stop()
         windows.forEach { $0.tabs.forEach { $0.panes.forEach { $0.teardown() } } }
     }
 
@@ -52,19 +61,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
         controller.show(cascadingFrom: parent?.window)
     }
 
-    /// `cave open`: web pages and HTML files open in a split, the rest in
-    /// their default app.
-    func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls {
-            let web = ["http", "https"].contains(url.scheme) || url.isFileURL && ["html", "htm"].contains(url.pathExtension)
-            // shortcut: opens beside the focused pane, not the one that ran the command;
-            // pass a pane id through the environment if that ever differs.
-            if web, let workspace = keyWorkspace ?? windows.last {
-                workspace.openWebPane(url)
-            } else {
-                NSWorkspace.shared.open(url)
+    /// `open <TAB> split|here <TAB> CODECAVE_PANE <TAB> path or URL`: web pages, HTML
+    /// and Markdown files open beside the terminal that ran `cave`, or in its place.
+    private func handleCave(_ fields: [Substring]) {
+        guard fields.count == 4, fields[0] == "open" else { return }
+        let target = String(fields[3])
+        guard let url = target.contains("://") ? URL(string: target) : URL(fileURLWithPath: target),
+              ["http", "https"].contains(url.scheme) || WebPaneView.isMarkdown(url)
+                || url.isFileURL && ["html", "htm"].contains(url.pathExtension.lowercased()) else { return }
+        let inPlace = fields[1] == "here"
+        for window in windows {
+            if let terminal = window.terminal(withID: fields[2]) {
+                return window.open(url, from: terminal, inPlace: inPlace)
             }
         }
+        (keyWorkspace ?? windows.last)?.open(url, from: nil, inPlace: inPlace)
     }
 
     // MARK: GhosttyRuntimeDelegate

@@ -77,6 +77,15 @@ final class Tab {
         return next
     }
 
+    /// Puts `pane` where `old` was. `old` isn't torn down.
+    func replace(_ old: any Pane, with pane: any Pane) {
+        root = root.replacing(old, with: pane)
+        paneViews[ObjectIdentifier(old)] = nil
+        if focused === old { focused = pane }
+        if zoomed === old { zoomed = pane }
+        rebuild()
+    }
+
     func target(from pane: any Pane, _ direction: ghostty_action_goto_split_e) -> (any Pane)? {
         root.target(from: pane, direction)
     }

@@ -52,6 +52,8 @@ enum TerminalCommand {
 /// since it encodes a lot of hard-won AppKit knowledge.
 final class TerminalView: NSView, Pane {
     private(set) var surface: ghostty_surface_t?
+    /// Exported to the shell as CODECAVE_PANE, so `cave` can say where it ran.
+    let id = UUID().uuidString
 
     weak var delegate: PaneDelegate?
 
@@ -91,9 +93,18 @@ final class TerminalView: NSView, Pane {
 
         surface = withOptionalCString(options.workingDirectory) { cwd in
             withOptionalCString(options.command) { command in
-                config.working_directory = cwd
-                config.command = command
-                return ghostty_surface_new(app, &config)
+                "CODECAVE_PANE".withCString { key in
+                    id.withCString { value in
+                        var env = ghostty_env_var_s(key: key, value: value)
+                        return withUnsafeMutablePointer(to: &env) { env in
+                            config.working_directory = cwd
+                            config.command = command
+                            config.env_vars = env
+                            config.env_var_count = 1
+                            return ghostty_surface_new(app, &config)
+                        }
+                    }
+                }
             }
         }
         if surface == nil {

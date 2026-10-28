@@ -37,6 +37,8 @@ targets:
         buildPhase: resources
       - path: Codecave/Resources/defaults.ghostty
         buildPhase: resources
+      - path: Codecave/Resources/marked.umd.js
+        buildPhase: resources
       - path: Codecave/bin
         type: folder
         buildPhase: resources

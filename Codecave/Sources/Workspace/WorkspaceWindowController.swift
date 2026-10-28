@@ -346,15 +346,29 @@ extension WorkspaceWindowController: PaneDelegate {
         tabs.first { $0.root.contains(pane) }
     }
 
-    func openWebPane(_ url: URL) {
-        guard let pane = selectedTab?.focused else { return }
-        openWebPane(url, beside: pane)
+    func terminal(withID id: Substring) -> TerminalView? {
+        tabs.lazy.flatMap(\.panes).compactMap { $0 as? TerminalView }.first { $0.id == id }
+    }
+
+    /// `cave open`: right of `pane` (the focused one if nil), or in its place.
+    func open(_ url: URL, from pane: (any Pane)?, inPlace: Bool) {
+        guard let pane = pane ?? selectedTab?.focused else { return }
+        guard inPlace, let tab = tab(for: pane) else {
+            openWebPane(url, beside: pane)
+            return
+        }
+        let web = WebPaneView(url: url, pwd: pane.pwd, theme: theme)
+        web.delegate = self
+        web.covered = pane
+        tab.replace(pane, with: web)
+        window?.makeFirstResponder(web)
+        sidebar.refresh(tab: tab)
     }
 
     @discardableResult
     private func openWebPane(_ url: URL, beside pane: any Pane) -> WebPaneView? {
         guard let tab = tab(for: pane) else { return nil }
-        let web = WebPaneView(url: url, pwd: pane.pwd, dark: theme.isDark)
+        let web = WebPaneView(url: url, pwd: pane.pwd, theme: theme)
         web.delegate = self
         tab.split(pane, adding: web, direction: GHOSTTY_SPLIT_DIRECTION_RIGHT)
         window?.makeFirstResponder(web)
@@ -363,6 +377,14 @@ extension WorkspaceWindowController: PaneDelegate {
 
     /// Closes one pane; closing the last pane closes the tab.
     private func closePane(_ pane: any Pane, in tab: Tab, confirm: Bool) {
+        if let web = pane as? WebPaneView, let covered = web.covered {
+            web.covered = nil
+            web.teardown()
+            tab.replace(web, with: covered)
+            if tab === selectedTab, !sidebar.hasFocus { window?.makeFirstResponder(covered) }
+            sidebar.refresh(tab: tab)
+            return
+        }
         guard tab.paneCount > 1 else {
             requestClose([tab], confirm: confirm)
             return

@@ -27,7 +27,12 @@ the right. `⌘R` reloads it. The split keybinds keep working there: the
 View menu takes their shortcuts from your Ghostty config.
 
 From the shell, `cave open index.html` (or a URL) opens it in a split
-to the right of the focused pane; anything else goes to macOS's `open`.
+to the right of the terminal you ran it in; anything else goes to macOS's
+`open`. `cave open -i` opens it in that terminal's place instead, like a
+pager: `q`, `esc` or `⌘W` bring the shell back.
+Markdown files (`cave open README.md`) are rendered in your terminal's
+colors with [marked](https://github.com/markedjs/marked); their embedded
+HTML can't run scripts.
 To make plain `open` do this inside Codecave, add to your `~/.zshrc`:
 
 ```sh

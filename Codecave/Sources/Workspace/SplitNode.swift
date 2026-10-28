@@ -60,6 +60,15 @@ indirect enum SplitNode {
         }
     }
 
+    func replacing(_ old: any Pane, with pane: any Pane) -> SplitNode {
+        switch self {
+        case .leaf(let existing):
+            existing === old ? .leaf(pane) : self
+        case .split(let axis, let ratio, let first, let second):
+            .split(axis, ratio: ratio, first.replacing(old, with: pane), second.replacing(old, with: pane))
+        }
+    }
+
     /// Sets the ratio of the split at `path` (false = first child, true = second).
     func setting(ratio newRatio: CGFloat, at path: ArraySlice<Bool>) -> SplitNode {
         guard case .split(let axis, let ratio, let first, let second) = self else { return self }

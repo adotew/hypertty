@@ -32,6 +32,18 @@ final class PaneView: NSView {
     private let blankIcon = NSImageView()
     private var urlObservation: NSKeyValueObservation?
 
+    /// Keys the pane didn't handle. A page covering a terminal closes on q or
+    /// esc, like a pager.
+    override func keyDown(with event: NSEvent) {
+        let plain = event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+        if let web = pane as? WebPaneView, web.covered != nil, plain,
+           event.keyCode == 53 || event.charactersIgnoringModifiers == "q" {
+            web.delegate?.paneDidRequestClose(web, confirm: false)
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+
     init(pane: any Pane, theme: Theme) {
         self.pane = pane
         card = CardContent(color: theme.background, radius: Self.cornerRadius)

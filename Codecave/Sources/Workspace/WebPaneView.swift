@@ -7,7 +7,9 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate, WKNavigationDelegate {
     weak var delegate: PaneDelegate?
     let pwd: String?
     var bell = false
-    var needsConfirmQuit: Bool { false }
+    var needsConfirmQuit: Bool { covered?.needsConfirmQuit ?? false }
+    /// Opened in this pane's place (`cave open -i`); closing the page brings it back.
+    var covered: (any Pane)?
 
     static let blank = URL(string: "about:blank")!
 
@@ -15,10 +17,14 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate, WKNavigationDelegate {
     private var favicon: NSImage?
     private var faviconURL: URL?
 
-    /// `dark` sets the page's prefers-color-scheme.
-    init(url: URL, pwd: String?, dark: Bool) {
+    /// The theme sets the page's prefers-color-scheme and colors Markdown.
+    init(url: URL, pwd: String?, theme: Theme) {
         self.pwd = pwd
         let configuration = WKWebViewConfiguration()
+        if let script = Self.markdownScript(theme: theme) {
+            configuration.userContentController.addUserScript(
+                WKUserScript(source: script, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: .defaultClient))
+        }
         // Without Safari's token sites like Google serve a legacy fixed-width
         // layout. Safari's major version matches macOS's since macOS 26.
         let version = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
@@ -26,7 +32,7 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate, WKNavigationDelegate {
         super.init(frame: NSRect(x: 0, y: 0, width: 800, height: 600), configuration: configuration)
         uiDelegate = self
         navigationDelegate = self
-        appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
         // The pane card is rounded; keep the page inside it.
         wantsLayer = true
         layer?.cornerRadius = PaneView.cornerRadius
@@ -57,6 +63,7 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate, WKNavigationDelegate {
     private static let globe = NSImage(systemSymbolName: "globe", accessibilityDescription: "Web page") ?? NSImage()
 
     func teardown() {
+        covered?.teardown()
         titleObservation = nil
         stopLoading()
     }
@@ -67,6 +74,56 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate, WKNavigationDelegate {
         return result
     }
 
+    /// Markdown is rendered by our script; the HTML it may contain must not run its own.
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                 preferences: WKWebpagePreferences,
+                 decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
+        if let url = navigationAction.request.url, Self.isMarkdown(url) {
+            preferences.allowsContentJavaScript = false
+        }
+        decisionHandler(.allow, preferences)
+    }
+
+    static func isMarkdown(_ url: URL) -> Bool {
+        url.isFileURL && ["md", "markdown"].contains(url.pathExtension.lowercased())
+    }
+
+    /// Defines `renderMarkdown(text)`, which replaces the page with `text` rendered
+    /// by marked, in the terminal's colors.
+    private static func markdownScript(theme: Theme) -> String? {
+        guard let marked = Bundle.main.url(forResource: "marked.umd", withExtension: "js"),
+              let source = try? String(contentsOf: marked, encoding: .utf8) else { return nil }
+        func css(_ color: NSColor) -> String {
+            guard let rgb = color.usingColorSpace(.sRGB) else { return "inherit" }
+            return "rgb(\(Int(rgb.redComponent * 255)) \(Int(rgb.greenComponent * 255)) \(Int(rgb.blueComponent * 255)) / \(rgb.alphaComponent))"
+        }
+        let style = """
+            html { background: \(css(theme.background)); color: \(css(theme.foreground)); }
+            body { font: 15px/1.6 -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 24px 32px; }
+            a { color: \(css(theme.accent)); }
+            h1, h2 { border-bottom: 1px solid \(css(theme.selection)); padding-bottom: .3em; }
+            code, pre { font-family: ui-monospace, monospace; font-size: 13px; background: \(css(theme.selection)); border-radius: 6px; }
+            code { padding: .15em .35em; }
+            pre { padding: 12px 16px; overflow-x: auto; }
+            pre code { padding: 0; background: none; }
+            blockquote { margin-left: 0; padding-left: 1em; border-left: 3px solid \(css(theme.selection)); color: \(css(theme.secondaryText)); }
+            table { border-collapse: collapse; }
+            th, td { border: 1px solid \(css(theme.selection)); padding: 6px 12px; }
+            img { max-width: 100%; }
+            """
+        return source + """
+
+            function renderMarkdown(text) {
+              const style = document.createElement('style')
+              style.textContent = \(String(reflecting: style))
+              document.head.append(style)
+              document.body.innerHTML = marked.parse(text)
+              const h1 = document.querySelector('h1')
+              if (h1) document.title = h1.textContent
+            }
+            """
+    }
+
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         load(navigationAction.request)
@@ -75,6 +132,10 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         loadFavicon()
+        // Read here: WebKit decodes the file as Latin-1.
+        if let url, Self.isMarkdown(url), let text = try? String(contentsOf: url, encoding: .utf8) {
+            callAsyncJavaScript("renderMarkdown(text)", arguments: ["text": text], in: nil, in: .defaultClient)
+        }
     }
 
     /// The page's `<link rel="icon">`, else /favicon.ico.
