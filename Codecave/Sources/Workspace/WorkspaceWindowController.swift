@@ -279,15 +279,20 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         closePane(tab.focused, in: tab, confirm: tab.focused.needsConfirmQuit)
     }
 
-    /// Cmd+L: edits the focused web pane's address, or opens a blank web
-    /// split right of the focused pane and asks for one.
+    /// Cmd+L: edits the focused web pane's address. From any other pane the
+    /// web split opens right of it once an address is submitted.
     @objc func openLocation(_ sender: Any?) {
         guard let window, let tab = selectedTab else { return }
-        guard let web = tab.focused as? WebPaneView ?? openWebPane(WebPaneView.blank, beside: tab.focused) else { return }
+        let pane = tab.focused
+        let web = pane as? WebPaneView
         locationPanel?.close()
-        let text = web.url == WebPaneView.blank ? "" : web.url?.absoluteString ?? ""
-        let panel = LocationPanel(text: text, dark: theme.isDark) { [weak web] url in
-            web?.load(URLRequest(url: url))
+        let text = web?.url == WebPaneView.blank ? "" : web?.url?.absoluteString ?? ""
+        let panel = LocationPanel(text: text, dark: theme.isDark) { [weak self, weak web, weak pane] url in
+            if let web {
+                web.load(URLRequest(url: url))
+            } else if let pane {
+                self?.openWebPane(url, beside: pane)
+            }
         }
         locationPanel = panel
         panel.show(over: window)
