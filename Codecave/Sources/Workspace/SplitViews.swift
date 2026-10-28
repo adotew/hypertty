@@ -111,6 +111,13 @@ private final class DimOverlay: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
+private struct Transition {
+    let start: CFTimeInterval
+    let from: CGFloat
+    let to: CGFloat
+    let completion: (() -> Void)?
+}
+
 /// Two children laid out at `ratio`, separated by a gap that can be
 /// dragged to resize.
 final class SplitContainerView: NSView {
@@ -120,6 +127,10 @@ final class SplitContainerView: NSView {
     var ratio: CGFloat { didSet { needsLayout = true } }
     /// Called while dragging the gap.
     var onRatioChange: ((CGFloat) -> Void)?
+    private var collapsed: CGFloat = 0 { didSet { needsLayout = true } }
+    private var collapsingSecond = true
+    private var transition: Transition?
+    private var displayLink: CADisplayLink?
 
     private let first: NSView
     private let second: NSView
@@ -141,17 +152,42 @@ final class SplitContainerView: NSView {
         fatalError("init(coder:) is not supported")
     }
 
+    func animate(_ child: NSView, appearing: Bool, completion: (() -> Void)? = nil) {
+        collapsingSecond = child === second
+        collapsed = appearing ? 1 : 0
+        transition = Transition(start: CACurrentMediaTime(), from: collapsed, to: appearing ? 0 : 1,
+                                completion: completion)
+        displayLink?.invalidate()
+        displayLink = displayLink(target: self, selector: #selector(step))
+        displayLink?.add(to: .main, forMode: .common)
+    }
+
+    @objc private func step(_ link: CADisplayLink) {
+        guard let transition else { return }
+        let progress = min(1, (link.targetTimestamp - transition.start) / 0.15)
+        let eased = progress < 0.5 ? 4 * pow(progress, 3) : 1 - pow(2 - 2 * progress, 3) / 2
+        collapsed = transition.from + (transition.to - transition.from) * eased
+        layoutSubtreeIfNeeded()
+        guard progress == 1 else { return }
+        link.invalidate()
+        displayLink = nil
+        self.transition = nil
+        transition.completion?()
+    }
+
     // Top-left origin, matching SplitNode.frames.
     override var isFlipped: Bool { true }
 
     override func layout() {
         super.layout()
         (first.frame, second.frame) = childFrames
+        (collapsingSecond ? second : first).alphaValue = 1 - collapsed
         window?.invalidateCursorRects(for: self)
     }
 
     private var childFrames: (CGRect, CGRect) {
-        let gap = Self.gap
+        let gap = Self.gap * (1 - collapsed)
+        let ratio = ratio + ((collapsingSecond ? 1 : 0) - ratio) * collapsed
         switch axis {
         case .horizontal:
             let firstWidth = ((bounds.width - gap) * ratio).rounded()
@@ -166,9 +202,10 @@ final class SplitContainerView: NSView {
 
     private var gapRect: CGRect {
         let firstFrame = childFrames.0
+        let gap = Self.gap * (1 - collapsed)
         switch axis {
-        case .horizontal: return CGRect(x: firstFrame.maxX, y: 0, width: Self.gap, height: bounds.height)
-        case .vertical: return CGRect(x: 0, y: firstFrame.maxY, width: bounds.width, height: Self.gap)
+        case .horizontal: return CGRect(x: firstFrame.maxX, y: 0, width: gap, height: bounds.height)
+        case .vertical: return CGRect(x: 0, y: firstFrame.maxY, width: bounds.width, height: gap)
         }
     }
 

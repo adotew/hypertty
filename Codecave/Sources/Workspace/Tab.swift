@@ -49,6 +49,8 @@ final class Tab {
         zoomed = nil
         root = root.inserting(pane, at: target, direction: direction)
         rebuild()
+        let paneView = view(for: pane)
+        (paneView.superview as? SplitContainerView)?.animate(paneView, appearing: true)
     }
 
     /// Removes a pane and returns the one to focus next, or nil if it was
@@ -58,10 +60,20 @@ final class Tab {
         let next = root.target(from: pane, GHOSTTY_GOTO_SPLIT_PREVIOUS)
         guard let newRoot = root.removing(pane) else { return nil }
         root = newRoot
+        let paneView = view(for: pane)
         paneViews[ObjectIdentifier(pane)] = nil
         if zoomed === pane { zoomed = nil }
         if focused === pane, let next { focused = next }
-        rebuild()
+        if let container = paneView.superview as? SplitContainerView, container.isDescendant(of: content) {
+            pane.removeFromSuperview()
+            updateDimming()
+            container.animate(paneView, appearing: false) { [weak self] in
+                guard let self, container.isDescendant(of: content) else { return }
+                rebuild()
+            }
+        } else {
+            rebuild()
+        }
         return next
     }
 
