@@ -141,9 +141,12 @@ final class GhosttyRuntime {
 
     /// Loads the same files Ghostty.app does: ~/.config/ghostty/config and
     /// ~/Library/Application Support/com.mitchellh.ghostty/config(.ghostty),
-    /// plus anything they `config-file` include.
+    /// plus anything they `config-file` include, on top of Codecave's defaults.
     private static func loadConfig() -> ghostty_config_t? {
         guard let config = ghostty_config_new() else { return nil }
+        if let defaults = Bundle.main.path(forResource: "defaults", ofType: "ghostty") {
+            ghostty_config_load_file(config, defaults)
+        }
         ghostty_config_load_default_files(config)
         #if DEBUG
         // Lets tests try settings without touching the user's config.
