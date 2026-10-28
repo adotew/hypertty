@@ -1,6 +1,6 @@
 import AppKit
 
-/// A browser-style location bar floating over the middle of a window.
+/// A browser-style location bar floating near the top of a window, like the command palette.
 /// Return submits, Escape or clicking elsewhere dismisses.
 final class LocationPanel: NSPanel, NSTextFieldDelegate {
     private static let size = NSSize(width: 600, height: 56)
