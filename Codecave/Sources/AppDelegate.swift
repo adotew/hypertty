@@ -118,8 +118,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
         viewMenu.addItem(.separator())
         viewMenu.addItem(commandItem("Split Right", .newSplit(GHOSTTY_SPLIT_DIRECTION_RIGHT), action: "new_split:right"))
         viewMenu.addItem(commandItem("Split Down", .newSplit(GHOSTTY_SPLIT_DIRECTION_DOWN), action: "new_split:down"))
-        viewMenu.addItem(withTitle: "Open Web Page in Split…",
-                         action: #selector(WorkspaceWindowController.newWebSplit(_:)), keyEquivalent: "l")
+        viewMenu.addItem(withTitle: "Open Location…",
+                         action: #selector(WorkspaceWindowController.openLocation(_:)), keyEquivalent: "l")
         viewMenu.addItem(withTitle: "Reload Page", action: #selector(WebPaneView.reload(_:)), keyEquivalent: "r")
         viewMenu.addItem(.separator())
         viewMenu.addItem(commandItem("Zoom Split", .toggleSplitZoom, action: "toggle_split_zoom"))

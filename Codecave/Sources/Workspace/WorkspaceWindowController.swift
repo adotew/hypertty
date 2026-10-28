@@ -16,6 +16,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     var onClose: ((WorkspaceWindowController) -> Void)?
 
     private let splitViewController = NSSplitViewController()
+    private var locationPanel: LocationPanel?
     let sidebar: SidebarViewController
     private let content: TabContainerViewController
     private let sidebarItem: NSSplitViewItem
@@ -47,11 +48,6 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         window.minSize = NSSize(width: 480, height: 240)
 
         super.init(window: window)
-        content.onAddressSubmit = { [weak self] text in
-            guard let webPane = self?.selectedTab?.focused as? WebPaneView,
-                  let url = WebPaneView.url(from: text) else { return }
-            webPane.load(URLRequest(url: url))
-        }
         window.delegate = self
         sidebar.tabList.delegate = self
 
@@ -124,7 +120,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
 
     func select(_ tab: Tab, focus: Bool = true) {
         selectedTab = tab
-        content.show(tab.view, webPane: tab.focused as? WebPaneView)
+        content.show(tab.view)
         window?.title = tab.title
         sidebar.update(tabs: tabs, selectedIndex: selectedIndex)
         if focus { focusTerminal() }
@@ -283,21 +279,18 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         closePane(tab.focused, in: tab, confirm: tab.focused.needsConfirmQuit)
     }
 
-    /// Asks for a URL and opens it in a split right of the focused pane.
-    @objc func newWebSplit(_ sender: Any?) {
-        guard let window, window.attachedSheet == nil, let pane = selectedTab?.focused else { return }
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
-        field.placeholderString = "localhost:3000"
-        let alert = NSAlert()
-        alert.messageText = "Open a web page in a split"
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Open")
-        alert.addButton(withTitle: "Cancel")
-        alert.window.initialFirstResponder = field
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn, let url = WebPaneView.url(from: field.stringValue) else { return }
-            self?.openWebPane(url, beside: pane)
+    /// Cmd+L: edits the focused web pane's address, or opens a blank web
+    /// split right of the focused pane and asks for one.
+    @objc func openLocation(_ sender: Any?) {
+        guard let window, let tab = selectedTab else { return }
+        guard let web = tab.focused as? WebPaneView ?? openWebPane(WebPaneView.blank, beside: tab.focused) else { return }
+        locationPanel?.close()
+        let text = web.url == WebPaneView.blank ? "" : web.url?.absoluteString ?? ""
+        let panel = LocationPanel(text: text, dark: theme.isDark) { [weak web] url in
+            web?.load(URLRequest(url: url))
         }
+        locationPanel = panel
+        panel.show(over: window)
     }
 
     @objc func renameTab(_ sender: Any?) {
@@ -334,12 +327,14 @@ extension WorkspaceWindowController: PaneDelegate {
         tabs.first { $0.root.contains(pane) }
     }
 
-    private func openWebPane(_ url: URL, beside pane: any Pane) {
-        guard let tab = tab(for: pane) else { return }
+    @discardableResult
+    private func openWebPane(_ url: URL, beside pane: any Pane) -> WebPaneView? {
+        guard let tab = tab(for: pane) else { return nil }
         let web = WebPaneView(url: url, pwd: pane.pwd, dark: theme.isDark)
         web.delegate = self
         tab.split(pane, adding: web, direction: GHOSTTY_SPLIT_DIRECTION_RIGHT)
         window?.makeFirstResponder(web)
+        return web
     }
 
     /// Closes one pane; closing the last pane closes the tab.
@@ -368,7 +363,7 @@ extension WorkspaceWindowController: PaneDelegate {
     func paneDidUpdate(_ pane: any Pane) {
         guard let tab = tab(for: pane) else { return }
         if tab === selectedTab {
-            content.show(tab.view, webPane: tab.focused as? WebPaneView)
+            content.show(tab.view)
             window?.title = tab.title
         }
         sidebar.refresh(tab: tab)
@@ -378,7 +373,7 @@ extension WorkspaceWindowController: PaneDelegate {
         guard let tab = tab(for: pane) else { return }
         tab.focusDidChange(to: pane)
         if tab === selectedTab {
-            content.show(tab.view, webPane: pane as? WebPaneView)
+            content.show(tab.view)
             window?.title = tab.title
         }
         sidebar.refresh(tab: tab)
@@ -499,31 +494,17 @@ final class TabContainerViewController: NSViewController {
 
     private var shown: NSView?
     private var topConstraint: NSLayoutConstraint?
-    private let addressField = NSTextField()
-    var onAddressSubmit: ((String) -> Void)?
     /// With the sidebar hidden, the traffic lights sit over the content,
     /// so the cards start below the titlebar.
     var clearsTitlebar = false {
         didSet { updateTopConstraint() }
     }
+
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
-        addressField.placeholderString = "Enter web address"
-        addressField.bezelStyle = .roundedBezel
-        addressField.isHidden = true
-        addressField.target = self
-        addressField.action = #selector(submitAddress)
-        addressField.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(addressField)
-        NSLayoutConstraint.activate([
-            addressField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Self.padding),
-            addressField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Self.padding),
-            addressField.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.padding),
-            addressField.heightAnchor.constraint(equalToConstant: 28),
-        ])
     }
 
-    func show(_ tabView: NSView, webPane: WebPaneView?) {
+    func show(_ tabView: NSView) {
         if tabView !== shown {
             shown?.removeFromSuperview()
             shown = tabView
@@ -537,25 +518,15 @@ final class TabContainerViewController: NSViewController {
                 tabView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -padding),
             ])
         }
-        addressField.isHidden = webPane == nil
-        addressField.stringValue = webPane?.url?.absoluteString ?? ""
         updateTopConstraint()
-    }
-
-    @objc private func submitAddress() {
-        onAddressSubmit?(addressField.stringValue)
     }
 
     private func updateTopConstraint() {
         guard let shown else { return }
         topConstraint?.isActive = false
-        if !addressField.isHidden {
-            topConstraint = shown.topAnchor.constraint(equalTo: addressField.bottomAnchor, constant: Self.padding)
-        } else {
-            topConstraint = clearsTitlebar
-                ? shown.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)
-                : shown.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.padding)
-        }
+        topConstraint = clearsTitlebar
+            ? shown.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)
+            : shown.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.padding)
         topConstraint?.isActive = true
     }
 }

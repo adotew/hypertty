@@ -23,6 +23,9 @@ final class PaneView: NSView {
         didSet { needsLayout = true }
     }
 
+    private let blankIcon = NSImageView()
+    private var urlObservation: NSKeyValueObservation?
+
     init(pane: any Pane, theme: Theme) {
         self.pane = pane
         card = CardContent(color: theme.background, radius: Self.cornerRadius)
@@ -39,6 +42,21 @@ final class PaneView: NSView {
         pane.autoresizingMask = []
         card.clipsToBounds = true
         card.addSubview(pane)
+
+        if let web = pane as? WebPaneView {
+            blankIcon.image = NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
+            blankIcon.symbolConfiguration = .init(pointSize: 48, weight: .light)
+            blankIcon.contentTintColor = .tertiaryLabelColor
+            blankIcon.isHidden = true
+            card.addSubview(blankIcon)
+            urlObservation = web.observe(\.url, options: [.initial, .new]) { [weak self] web, _ in
+                guard let self else { return }
+                let blank = web.url == WebPaneView.blank
+                // Hide the page's white background; alpha keeps it focusable.
+                web.alphaValue = blank ? 0 : 1
+                blankIcon.isHidden = !blank
+            }
+        }
 
         overlay.isHidden = true
         addSubview(overlay)
@@ -58,6 +76,9 @@ final class PaneView: NSView {
         card.frame = glass.bounds
         overlay.frame = bounds
         if !freezesPane { pane.frame = card.bounds }
+        blankIcon.sizeToFit()
+        blankIcon.frame.origin = NSPoint(x: card.bounds.midX - blankIcon.frame.width / 2,
+                                         y: card.bounds.midY - blankIcon.frame.height / 2)
     }
 
     override func viewDidMoveToSuperview() {

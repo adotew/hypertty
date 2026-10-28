@@ -9,6 +9,8 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate, WKNavigationDelegate {
     var bell = false
     var needsConfirmQuit: Bool { false }
 
+    static let blank = URL(string: "about:blank")!
+
     private var titleObservation: NSKeyValueObservation?
     private var favicon: NSImage?
     private var faviconURL: URL?
