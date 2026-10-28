@@ -101,6 +101,7 @@ final class TerminalView: NSView, Pane {
         }
 
         updateTrackingAreas()
+        registerForDraggedTypes([.fileURL, .URL, .string])
     }
 
     required init?(coder: NSCoder) {
@@ -592,6 +593,41 @@ final class TerminalView: NSView, Pane {
     @objc func copy(_ sender: Any?) { perform(action: "copy_to_clipboard") }
     @objc func paste(_ sender: Any?) { perform(action: "paste_from_clipboard") }
     @objc override func selectAll(_ sender: Any?) { perform(action: "select_all") }
+
+    // MARK: Drag and drop
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        Self.dropText(from: sender.draggingPasteboard) == nil ? [] : .copy
+    }
+
+    /// Types dropped files as shell-escaped paths, like Terminal.app, so a
+    /// dropped screenshot reaches a coding agent as an image path.
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let surface, let text = Self.dropText(from: sender.draggingPasteboard) else { return false }
+        text.withCString { ghostty_surface_text(surface, $0, UInt(text.utf8.count)) }
+        window?.makeKeyAndOrderFront(nil)
+        window?.makeFirstResponder(self)
+        return true
+    }
+
+    static func dropText(from pasteboard: NSPasteboard) -> String? {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        if let files = pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL], !files.isEmpty {
+            return files.map { shellEscape($0.path) }.joined(separator: " ")
+        }
+        if let url = pasteboard.readObjects(forClasses: [NSURL.self])?.first as? URL {
+            return url.absoluteString
+        }
+        return pasteboard.string(forType: .string)
+    }
+
+    static func shellEscape(_ path: String) -> String {
+        let special = Set("\\ ()[]{}<>\"'`!#$&;|*?\t")
+        return path.reduce(into: "") { result, char in
+            if special.contains(char) { result.append("\\") }
+            result.append(char)
+        }
+    }
 }
 
 // MARK: - NSTextInputClient
