@@ -35,6 +35,8 @@ targets:
       - path: Codecave/Resources/AppIcons
         type: folder
         buildPhase: resources
+      - path: Codecave/Resources/AppIcon.icns
+        buildPhase: resources
       - path: Codecave/Resources/defaults.ghostty
         buildPhase: resources
       - path: Codecave/Resources/marked.umd.js
@@ -50,6 +52,7 @@ targets:
       path: Codecave/Info.plist
       properties:
         CFBundleDisplayName: Codecave
+        CFBundleIconFile: AppIcon
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         LSApplicationCategoryType: public.app-category.developer-tools
