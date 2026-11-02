@@ -30,7 +30,7 @@ jobs:
           hdiutil create -volname Hypertty -srcfolder dmg -format UDZO \
             Hypertty-arm64.dmg
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: Hypertty-arm64
           path: Hypertty-arm64.dmg
