@@ -6,9 +6,9 @@ import GhosttyKit
 /// Development aid for verifying the UI without screen-recording
 /// permission. Launch with:
 ///
-///   CODECAVE_SNAPSHOT=/tmp/shot           write /tmp/shot.png and /tmp/shot.txt, then exit
-///   CODECAVE_SNAPSHOT_INPUT='ls'          run a command in the selected tab first
-///   CODECAVE_SNAPSHOT_ACTIONS='new_tab;goto_tab:1;@focusTabSidebar:;key:j'
+///   HYPERTTY_SNAPSHOT=/tmp/shot           write /tmp/shot.png and /tmp/shot.txt, then exit
+///   HYPERTTY_SNAPSHOT_INPUT='ls'          run a command in the selected tab first
+///   HYPERTTY_SNAPSHOT_ACTIONS='new_tab;goto_tab:1;@focusTabSidebar:;key:j'
 ///       steps run 0.5s apart: Ghostty keybind actions on the selected
 ///       terminal, `@selector:` sent through the responder chain, or
 ///       `key:<chars>` typed into the first responder (`\r` for Return,
@@ -19,10 +19,10 @@ import GhosttyKit
 enum DebugSnapshot {
     static func scheduleIfRequested(for workspace: WorkspaceWindowController) {
         let env = ProcessInfo.processInfo.environment
-        guard let path = env["CODECAVE_SNAPSHOT"] else { return }
+        guard let path = env["HYPERTTY_SNAPSHOT"] else { return }
         var steps: [String] = []
-        if let input = env["CODECAVE_SNAPSHOT_INPUT"] { steps.append("input:" + input) }
-        steps += (env["CODECAVE_SNAPSHOT_ACTIONS"] ?? "").split(separator: ";").map(String.init)
+        if let input = env["HYPERTTY_SNAPSHOT_INPUT"] { steps.append("input:" + input) }
+        steps += (env["HYPERTTY_SNAPSHOT_ACTIONS"] ?? "").split(separator: ";").map(String.init)
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             run(steps[...], in: workspace) {

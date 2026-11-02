@@ -8,7 +8,7 @@ CONFIG ?= Debug
 
 DERIVED := build
 # Recursive so it picks up the configuration of the target being built.
-APP = $(DERIVED)/Build/Products/$(CONFIG)/Codecave.app
+APP = $(DERIVED)/Build/Products/$(CONFIG)/Hypertty.app
 GHOSTTYKIT := vendor/ghostty/macos/GhosttyKit.xcframework
 
 .PHONY: all ghostty project app release run run-release clean
@@ -27,7 +27,7 @@ project:
 	xcodegen generate --quiet --use-cache
 
 app: $(GHOSTTYKIT) project
-	xcodebuild -project Codecave.xcodeproj -scheme Codecave -configuration $(CONFIG) \
+	xcodebuild -project Hypertty.xcodeproj -scheme Hypertty -configuration $(CONFIG) \
 		-derivedDataPath $(DERIVED) -quiet build
 
 release: CONFIG := Release
@@ -41,4 +41,4 @@ run-release: CONFIG := Release
 run-release: run
 
 clean:
-	rm -rf $(DERIVED) Codecave.xcodeproj
+	rm -rf $(DERIVED) Hypertty.xcodeproj

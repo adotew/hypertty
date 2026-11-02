@@ -1,10 +1,10 @@
 import Foundation
 import Network
 
-/// Listens for the `cave` command on a Unix socket, exported to shells as
-/// CODECAVE_SOCKET. One request per connection: a line of tab-separated fields.
-final class CaveServer {
-    let path = NSTemporaryDirectory() + "codecave-\(getpid()).sock"
+/// Listens for the `htty` command on a Unix socket, exported to shells as
+/// HYPERTTY_SOCKET. One request per connection: a line of tab-separated fields.
+final class HttyServer {
+    let path = NSTemporaryDirectory() + "hypertty-\(getpid()).sock"
     private let listener: NWListener
 
     init(onRequest: @escaping ([Substring]) -> Void) throws {

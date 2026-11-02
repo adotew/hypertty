@@ -21,6 +21,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     let sidebar: SidebarViewController
     private let content: TabContainerViewController
     private let sidebarItem: NSSplitViewItem
+    private let titlebar: TitlebarView
     /// The sidebar was revealed by focusTabSidebar and hides again when
     /// focus returns to the terminal.
     private var sidebarPeeking = false
@@ -34,6 +35,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         sidebar = SidebarViewController(theme: theme)
         content = TabContainerViewController()
         sidebarItem = NSSplitViewItem(viewController: sidebar)
+        titlebar = TitlebarView(theme: theme)
 
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1100, height: 680),
@@ -69,8 +71,27 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
         splitViewController.addSplitViewItem(sidebarItem)
         splitViewController.addSplitViewItem(contentItem)
 
-        window.contentViewController = splitViewController
+        // The titlebar floats over the split view, right of the traffic lights.
+        let root = NSViewController()
+        root.view = NSView()
+        root.addChild(splitViewController)
+        let splitRoot = splitViewController.view
+        splitRoot.frame = root.view.bounds
+        splitRoot.autoresizingMask = [.width, .height]
+        root.view.addSubview(splitRoot)
+        titlebar.translatesAutoresizingMaskIntoConstraints = false
+        titlebar.toggle.target = self
+        titlebar.toggle.action = #selector(toggleTabSidebar)
+        root.view.addSubview(titlebar)
+        window.contentViewController = root
         window.setContentSize(NSSize(width: 1100, height: 680))
+        let lights = window.standardWindowButton(.zoomButton).map { $0.convert($0.bounds, to: nil).maxX } ?? 70
+        NSLayoutConstraint.activate([
+            titlebar.leadingAnchor.constraint(equalTo: root.view.leadingAnchor, constant: lights + 14),
+            titlebar.trailingAnchor.constraint(lessThanOrEqualTo: root.view.trailingAnchor, constant: -12),
+            // Centered on the traffic lights (14pt buttons 9pt from the top).
+            titlebar.centerYAnchor.constraint(equalTo: root.view.topAnchor, constant: 16),
+        ])
 
         addTab(options: options)
     }
@@ -122,8 +143,8 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     func select(_ tab: Tab, focus: Bool = true) {
         selectedTab = tab
         content.show(tab.view)
-        window?.title = tab.title
         sidebar.update(tabs: tabs, selectedIndex: selectedIndex)
+        updateTitle()
         if focus { focusTerminal() }
     }
 
@@ -157,7 +178,17 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
             select(tabs[min(index, tabs.count - 1)], focus: !sidebarHadFocus)
         } else {
             sidebar.update(tabs: tabs, selectedIndex: selectedIndex)
+            updateTitle()
         }
+    }
+
+    /// The window title and the titlebar: the selected tab, and a dot on the
+    /// sidebar toggle while another tab rang its bell.
+    private func updateTitle() {
+        guard let tab = selectedTab else { return }
+        window?.title = tab.title
+        titlebar.update(tab: tab, showsTitle: sidebarItem.isCollapsed,
+                        hasBell: tabs.contains { $0 !== tab && $0.hasBell })
     }
 
     func move(_ tab: Tab, by offset: Int) {
@@ -219,6 +250,7 @@ final class WorkspaceWindowController: NSWindowController, NSWindowDelegate {
     private func setSidebarCollapsed(_ collapsed: Bool) {
         sidebarItem.animator().isCollapsed = collapsed
         content.clearsTitlebar = collapsed
+        updateTitle()
     }
 
     // MARK: Menu actions
@@ -350,7 +382,7 @@ extension WorkspaceWindowController: PaneDelegate {
         tabs.lazy.flatMap(\.panes).compactMap { $0 as? TerminalView }.first { $0.id == id }
     }
 
-    /// `cave open`: right of `pane` (the focused one if nil), or in its place.
+    /// `htty open`: right of `pane` (the focused one if nil), or in its place.
     func open(_ url: URL, from pane: (any Pane)?, inPlace: Bool) {
         guard let pane = pane ?? selectedTab?.focused else { return }
         guard inPlace, let tab = tab(for: pane) else {
@@ -363,6 +395,18 @@ extension WorkspaceWindowController: PaneDelegate {
         tab.replace(pane, with: web)
         window?.makeFirstResponder(web)
         sidebar.refresh(tab: tab)
+    }
+
+    /// `htty diff`: a terminal right of `pane` (the focused one if nil) that runs
+    /// `htty diff -i path`, in the user's shell so Neovim gets their PATH.
+    func openDiff(of path: String, from pane: (any Pane)?) {
+        guard let pane = pane ?? selectedTab?.focused, let tab = tab(for: pane) else { return }
+        var options = SurfaceOptions(inheriting: pane, context: GHOSTTY_SURFACE_CONTEXT_SPLIT)
+        // Exec'd so quitting Neovim closes the split; the leading space keeps it out of history.
+        options.initialInput = " exec htty diff -i '\(path.replacingOccurrences(of: "'", with: "'\\''"))'\n"
+        guard let terminal = makeTerminal(options) else { return }
+        tab.split(pane, adding: terminal, direction: GHOSTTY_SPLIT_DIRECTION_RIGHT)
+        window?.makeFirstResponder(terminal)
     }
 
     @discardableResult
@@ -408,21 +452,17 @@ extension WorkspaceWindowController: PaneDelegate {
 
     func paneDidUpdate(_ pane: any Pane) {
         guard let tab = tab(for: pane) else { return }
-        if tab === selectedTab {
-            content.show(tab.view)
-            window?.title = tab.title
-        }
+        if tab === selectedTab { content.show(tab.view) }
         sidebar.refresh(tab: tab)
+        updateTitle()
     }
 
     func paneDidFocus(_ pane: any Pane) {
         guard let tab = tab(for: pane) else { return }
         tab.focusDidChange(to: pane)
-        if tab === selectedTab {
-            content.show(tab.view)
-            window?.title = tab.title
-        }
+        if tab === selectedTab { content.show(tab.view) }
         sidebar.refresh(tab: tab)
+        updateTitle()
     }
 
     func paneDidRequestClose(_ pane: any Pane, confirm: Bool) {
@@ -519,9 +559,9 @@ extension WorkspaceWindowController: TabListDelegate {
     func tabList(_ list: TabListViewController, didRenameTabAt index: Int, to title: String?) {
         if let title, tabs.indices.contains(index) {
             tabs[index].customTitle = title.isEmpty ? nil : title
-            if tabs[index] === selectedTab { window?.title = tabs[index].title }
         }
         sidebar.update(tabs: tabs, selectedIndex: selectedIndex)
+        updateTitle()
         if renameReturnsToTerminal {
             renameReturnsToTerminal = false
             focusTerminal()
@@ -577,6 +617,72 @@ final class TabContainerViewController: NSViewController {
             ? shown.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)
             : shown.topAnchor.constraint(equalTo: view.topAnchor, constant: Self.padding)
         topConstraint?.isActive = true
+    }
+}
+
+/// Right of the traffic lights: the sidebar toggle and, with the sidebar
+/// hidden, the selected tab's icon, title and working directory.
+private final class TitlebarView: NSStackView {
+    let toggle = NSButton()
+    private let badge = FillView(color: .clear)
+    private let icon = NSImageView()
+    private let titleField = NSTextField(labelWithString: "")
+    private let theme: Theme
+
+    init(theme: Theme) {
+        self.theme = theme
+        super.init(frame: .zero)
+        orientation = .horizontal
+        alignment = .centerY
+        spacing = 10
+        setHuggingPriority(.required, for: .horizontal)
+
+        toggle.image = NSImage(systemSymbolName: "sidebar.left", accessibilityDescription: "Toggle Sidebar")
+        toggle.isBordered = false
+        toggle.contentTintColor = theme.secondaryText
+        toggle.toolTip = "Toggle Sidebar"
+        badge.color = theme.accent
+        badge.wantsLayer = true
+        badge.layer?.cornerRadius = 3.5
+        badge.layer?.masksToBounds = true
+        badge.translatesAutoresizingMaskIntoConstraints = false
+        toggle.addSubview(badge)
+
+        icon.imageScaling = .scaleProportionallyDown
+        icon.contentTintColor = theme.foreground
+        titleField.lineBreakMode = .byTruncatingMiddle
+        titleField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let title = NSStackView(views: [icon, titleField])
+        title.spacing = 6
+        setViews([toggle, title], in: .leading)
+
+        NSLayoutConstraint.activate([
+            badge.widthAnchor.constraint(equalToConstant: 7),
+            badge.heightAnchor.constraint(equalToConstant: 7),
+            badge.centerXAnchor.constraint(equalTo: toggle.trailingAnchor),
+            badge.centerYAnchor.constraint(equalTo: toggle.topAnchor, constant: 1),
+            icon.widthAnchor.constraint(equalToConstant: 16),
+            icon.heightAnchor.constraint(equalToConstant: 16),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    func update(tab: Tab, showsTitle: Bool, hasBell: Bool) {
+        badge.isHidden = !hasBell
+        icon.superview?.isHidden = !showsTitle
+        icon.image = tab.icon
+        let text = NSMutableAttributedString(string: tab.title, attributes: [
+            .font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: theme.foreground,
+        ])
+        if let pwd = tab.focused.pwd.map({ ($0 as NSString).abbreviatingWithTildeInPath }), pwd != tab.title {
+            text.append(NSAttributedString(string: "  " + pwd, attributes: [
+                .font: NSFont.systemFont(ofSize: 13), .foregroundColor: theme.secondaryText,
+            ]))
+        }
+        titleField.attributedStringValue = text
     }
 }
 

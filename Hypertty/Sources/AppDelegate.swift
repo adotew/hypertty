@@ -4,15 +4,15 @@ import GhosttyKit
 final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate {
     private var runtime: GhosttyRuntime!
     private var windows: [WorkspaceWindowController] = []
-    private var caveServer: CaveServer?
+    private var httyServer: HttyServer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
-            let server = try CaveServer { [weak self] in self?.handleCave($0) }
-            setenv("CODECAVE_SOCKET", server.path, 1)
-            caveServer = server
+            let server = try HttyServer { [weak self] in self?.handleHtty($0) }
+            setenv("HYPERTTY_SOCKET", server.path, 1)
+            httyServer = server
         } catch {
-            NSLog("cave server failed: \(error)")
+            NSLog("htty server failed: \(error)")
         }
         runtime = GhosttyRuntime()
         runtime.delegate = self
@@ -28,7 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard runtime.needsConfirmQuit else { return .terminateNow }
         let alert = NSAlert()
-        alert.messageText = "Quit Codecave?"
+        alert.messageText = "Quit Hypertty?"
         alert.informativeText = "Processes are still running in your terminals and will be terminated."
         alert.addButton(withTitle: "Quit")
         alert.addButton(withTitle: "Cancel")
@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        caveServer?.stop()
+        httyServer?.stop()
         windows.forEach { $0.tabs.forEach { $0.panes.forEach { $0.teardown() } } }
     }
 
@@ -61,9 +61,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
         controller.show(cascadingFrom: parent?.window)
     }
 
-    /// `open <TAB> split|here <TAB> CODECAVE_PANE <TAB> path or URL`: web pages, HTML
-    /// and Markdown files open beside the terminal that ran `cave`, or in its place.
-    private func handleCave(_ fields: [Substring]) {
+    /// `open <TAB> split|here <TAB> HYPERTTY_PANE <TAB> path or URL`: web pages, HTML
+    /// and Markdown files open beside the terminal that ran `htty`, or in its place.
+    /// `diff <TAB> HYPERTTY_PANE <TAB> path`: `htty diff` in a split beside it.
+    private func handleHtty(_ fields: [Substring]) {
+        if fields.count == 3, fields[0] == "diff" {
+            for window in windows {
+                if let terminal = window.terminal(withID: fields[1]) {
+                    return window.openDiff(of: String(fields[2]), from: terminal)
+                }
+            }
+            (keyWorkspace ?? windows.last)?.openDiff(of: String(fields[2]), from: nil)
+            return
+        }
         guard fields.count == 4, fields[0] == "open" else { return }
         let target = String(fields[3])
         guard let url = target.contains("://") ? URL(string: target) : URL(fileURLWithPath: target),
@@ -109,12 +119,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, GhosttyRuntimeDelegate
         let main = NSMenu()
 
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "About Codecave",
+        appMenu.addItem(withTitle: "About Hypertty",
                         action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Hide Codecave", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        appMenu.addItem(withTitle: "Quit Codecave", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        main.addItem(submenu: appMenu, title: "Codecave")
+        appMenu.addItem(withTitle: "Hide Hypertty", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "Quit Hypertty", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        main.addItem(submenu: appMenu, title: "Hypertty")
 
         let fileMenu = NSMenu(title: "File")
         fileMenu.addItem(withTitle: "New Tab", action: #selector(WorkspaceWindowController.newTab(_:)),

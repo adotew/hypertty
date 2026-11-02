@@ -141,7 +141,7 @@ final class GhosttyRuntime {
 
     /// Loads the same files Ghostty.app does: ~/.config/ghostty/config and
     /// ~/Library/Application Support/com.mitchellh.ghostty/config(.ghostty),
-    /// plus anything they `config-file` include, on top of Codecave's defaults.
+    /// plus anything they `config-file` include, on top of Hypertty's defaults.
     private static func loadConfig() -> ghostty_config_t? {
         guard let config = ghostty_config_new() else { return nil }
         if let defaults = Bundle.main.path(forResource: "defaults", ofType: "ghostty") {
@@ -150,7 +150,7 @@ final class GhosttyRuntime {
         ghostty_config_load_default_files(config)
         #if DEBUG
         // Lets tests try settings without touching the user's config.
-        if let extra = ProcessInfo.processInfo.environment["CODECAVE_EXTRA_CONFIG"] {
+        if let extra = ProcessInfo.processInfo.environment["HYPERTTY_EXTRA_CONFIG"] {
             ghostty_config_load_file(config, extra)
         }
         #endif
@@ -438,7 +438,7 @@ extension NSColor {
 }
 
 extension NSPasteboard {
-    static let ghosttySelection = NSPasteboard(name: .init("dev.codecave.selection"))
+    static let ghosttySelection = NSPasteboard(name: .init("dev.hypertty.selection"))
 
     static func ghostty(_ location: ghostty_clipboard_e) -> NSPasteboard? {
         switch location {

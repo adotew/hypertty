@@ -8,7 +8,7 @@ final class WebPaneView: WKWebView, Pane, WKUIDelegate, WKNavigationDelegate {
     let pwd: String?
     var bell = false
     var needsConfirmQuit: Bool { covered?.needsConfirmQuit ?? false }
-    /// Opened in this pane's place (`cave open -i`); closing the page brings it back.
+    /// Opened in this pane's place (`htty open -i`); closing the page brings it back.
     var covered: (any Pane)?
 
     static let blank = URL(string: "about:blank")!

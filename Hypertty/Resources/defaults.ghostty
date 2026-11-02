@@ -1,0 +1,2 @@
+# Hypertty's defaults, loaded before the user's Ghostty config so it can override them.
+font-family = JetBrainsMono Nerd Font

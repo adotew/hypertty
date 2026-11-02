@@ -1,7 +1,7 @@
 # XcodeGen spec. Regenerate the project with `make project`.
-name: Codecave
+name: Hypertty
 options:
-  bundleIdPrefix: dev.codecave
+  bundleIdPrefix: dev.hypertty
   deploymentTarget:
     macOS: "26.0"
   createIntermediateGroups: true
@@ -16,11 +16,11 @@ settings:
     ENABLE_HARDENED_RUNTIME: NO
 
 targets:
-  Codecave:
+  Hypertty:
     type: application
     platform: macOS
     sources:
-      - path: Codecave/Sources
+      - path: Hypertty/Sources
       # libghostty locates its themes, shell integration and terminfo by
       # looking for Contents/Resources/terminfo/78/xterm-ghostty in the bundle.
       - path: vendor/ghostty/zig-out/share/ghostty
@@ -29,19 +29,22 @@ targets:
       - path: vendor/ghostty/zig-out/share/terminfo
         type: folder
         buildPhase: resources
-      - path: Codecave/Resources/FileIcons
+      - path: Hypertty/Resources/FileIcons
         type: folder
         buildPhase: resources
-      - path: Codecave/Resources/AppIcons
+      - path: Hypertty/Resources/AppIcons
         type: folder
         buildPhase: resources
-      - path: Codecave/Resources/AppIcon.icns
+      - path: Hypertty/Resources/AppIcon.icns
         buildPhase: resources
-      - path: Codecave/Resources/defaults.ghostty
+      - path: Hypertty/Resources/defaults.ghostty
         buildPhase: resources
-      - path: Codecave/Resources/marked.umd.js
+      - path: Hypertty/Resources/marked.umd.js
         buildPhase: resources
-      - path: Codecave/bin
+      - path: Hypertty/bin
+        type: folder
+        buildPhase: resources
+      - path: Hypertty/Resources/nvim
         type: folder
         buildPhase: resources
     dependencies:
@@ -49,9 +52,9 @@ targets:
         embed: false
       - sdk: Carbon.framework
     info:
-      path: Codecave/Info.plist
+      path: Hypertty/Info.plist
       properties:
-        CFBundleDisplayName: Codecave
+        CFBundleDisplayName: Hypertty
         CFBundleIconFile: AppIcon
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
@@ -60,5 +63,5 @@ targets:
         NSHighResolutionCapable: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.codecave.Codecave
+        PRODUCT_BUNDLE_IDENTIFIER: dev.hypertty.Hypertty
         OTHER_LDFLAGS: ["-lc++"]

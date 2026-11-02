@@ -1,0 +1,51 @@
+#!/bin/sh
+# htty open [-i] <file.html|file.md|url>...: opens them in a split right of the
+# terminal that ran it, or with -i in its place (q or esc goes back). Anything
+# else, or outside Hypertty, goes to macOS's open, so aliasing `open` is safe.
+# htty diff [-i] [path]: the changes since HEAD under path (default .) in
+# Neovim, with Hypertty's :HttyDiff, in a split right of the terminal or with
+# -i in its place.
+usage() {
+    echo "usage: htty open [-i] <file|url>..." >&2
+    echo "       htty diff [-i] [path]" >&2
+    exit 64
+}
+command=$1
+[ "$command" = open ] || [ "$command" = diff ] || usage
+shift
+mode=split
+if [ "$1" = -i ]; then
+    mode=here
+    shift
+fi
+
+if [ "$command" = diff ]; then
+    target=${1:-.}
+    case $target in
+        /*) ;;
+        *) target=$PWD/$target ;;
+    esac
+    if [ "$mode" = here ] || [ ! -S "$HYPERTTY_SOCKET" ]; then
+        # :set needs spaces escaped. Added after startup: lazy.nvim resets the runtimepath.
+        plugin=$(cd "$(dirname "$0")/../nvim" && pwd | sed 's/ /\\ /g')
+        exec nvim -c "set rtp^=$plugin" -c 'runtime plugin/htty.lua' -c "HttyDiff $target"
+    fi
+    printf 'diff\t%s\t%s\n' "$HYPERTTY_PANE" "$target" | nc -U "$HYPERTTY_SOCKET" >/dev/null
+    exit
+fi
+
+[ -S "$HYPERTTY_SOCKET" ] || exec /usr/bin/open "$@"
+for arg; do
+    case $arg in
+        http://* | https://*) ;;
+        *.html | *.htm | *.md | *.markdown) [ -f "$arg" ] || exec /usr/bin/open "$@" ;;
+        *) exec /usr/bin/open "$@" ;;
+    esac
+done
+for arg; do
+    case $arg in
+        http://* | https://* | /*) ;;
+        *) arg=$PWD/$arg ;;
+    esac
+    printf 'open\t%s\t%s\t%s\n' "$mode" "$HYPERTTY_PANE" "$arg" | nc -U "$HYPERTTY_SOCKET" >/dev/null
+done

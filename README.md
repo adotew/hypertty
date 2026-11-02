@@ -1,4 +1,4 @@
-# Codecave
+# Hypertty
 
 A keyboard-driven terminal workspace for macOS, built on libghostty.
 
@@ -26,24 +26,34 @@ A pane can also show a web page: `⌘`-click a link in the terminal, or
 the right. `⌘R` reloads it. The split keybinds keep working there: the
 View menu takes their shortcuts from your Ghostty config.
 
-From the shell, `cave open index.html` (or a URL) opens it in a split
+From the shell, `htty open index.html` (or a URL) opens it in a split
 to the right of the terminal you ran it in; anything else goes to macOS's
-`open`. `cave open -i` opens it in that terminal's place instead, like a
+`open`. `htty open -i` opens it in that terminal's place instead, like a
 pager: `q`, `esc` or `⌘W` bring the shell back.
-Markdown files (`cave open README.md`) are rendered in your terminal's
+Markdown files (`htty open README.md`) are rendered in your terminal's
 colors with [marked](https://github.com/markedjs/marked); their embedded
 HTML can't run scripts.
-To make plain `open` do this inside Codecave, add to your `~/.zshrc`:
+To make plain `open` do this inside Hypertty, add to your `~/.zshrc`:
 
 ```sh
-(( $+commands[cave] )) && alias open='cave open'
+(( $+commands[htty] )) && alias open='htty open'
 ```
+
+`htty diff [path]` opens the changes since HEAD under the current folder
+(or `path`) in Neovim, in a split to the right; `htty diff -i` runs it in
+that terminal. It's Hypertty's `:HttyDiff` plugin
+(`Hypertty/Resources/nvim`), loaded alongside your config: each changed
+file is its own buffer, so your LSP and `:w` work as usual. Added lines
+are highlighted, deleted ones shown inline, unchanged regions folded
+(`zo` opens), and every hunk is in the quickfix list (`]q` / `[q`).
+`]f` / `[f` go to the next / previous file and `do` reverts the hunk
+under the cursor.
 
 Each tab shows an icon: the running program's (Neovim, Rust, Pi, Claude,
 Codex, lazygit, ...; see `AppIcons.swift`), a web page's favicon, or a
 terminal.
 
-Codecave adds `⌘B` (toggle sidebar), `⌘S` (focus the tab list) and `⌘⇧E`
+Hypertty adds `⌘B` (toggle sidebar), `⌘S` (focus the tab list) and `⌘⇧E`
 (focus the changes). `⇥` switches between the two in the sidebar. In
 the tab list:
 
@@ -74,7 +84,7 @@ unstaged and untracked ones, updated as files change.
 
 Files open in `$EDITOR` (`nvim` if unset), run from an interactive login
 shell so your PATH applies. File icons are JetBrains' New UI icons (see
-`Codecave/Resources/FileIcons/NOTICE.md`).
+`Hypertty/Resources/FileIcons/NOTICE.md`).
 
 `⌘S` / `⌘⇧E` with the sidebar hidden peek it open; it hides again when you
 return to the terminal.
@@ -92,9 +102,9 @@ make run       # generates the Xcode project, builds and opens the app
 
 `make` builds Debug by default. For an optimized build, use
 `make release` (or `make run-release` to open it); the app lands in
-`build/Build/Products/Release/Codecave.app`. `make app CONFIG=Release`
+`build/Build/Products/Release/Hypertty.app`. `make app CONFIG=Release`
 does the same without opening it. Debug-only extras (snapshot dumping,
-`CODECAVE_EXTRA_CONFIG`) are compiled out of release builds.
+`HYPERTTY_EXTRA_CONFIG`) are compiled out of release builds.
 
 ## Layout
 
@@ -103,13 +113,13 @@ does the same without opening it. Debug-only extras (snapshot dumping,
 - `scripts/build-ghosttykit.sh`: builds the xcframework and resources.
   `scripts/toolshim/libtool` works around Xcode 27's libtool dropping
   Zig-produced archive members.
-- `Codecave/Sources/Ghostty`: the libghostty embedding (runtime callbacks,
+- `Hypertty/Sources/Ghostty`: the libghostty embedding (runtime callbacks,
   the terminal NSView and its keyboard/IME/mouse handling).
-- `Codecave/Sources/Workspace`: windows, tabs, splits (terminal and web
+- `Hypertty/Sources/Workspace`: windows, tabs, splits (terminal and web
   panes) and the sidebar
   (tab list and file tree).
-- `Codecave/Resources/FileIcons`: file type icons.
-- `Codecave/Resources/AppIcons`: program icons for the tab list.
+- `Hypertty/Resources/FileIcons`: file type icons.
+- `Hypertty/Resources/AppIcons`: program icons for the tab list.
 
 ## Debug snapshot
 
@@ -117,11 +127,11 @@ Debug builds can dump the rendered frame and screen text, which is handy
 for checking rendering without screen-recording permission:
 
 ```sh
-open -n -W --env CODECAVE_SNAPSHOT=/tmp/shot --env 'CODECAVE_SNAPSHOT_INPUT=ls' \
-  --env 'CODECAVE_SNAPSHOT_ACTIONS=new_tab;@focusTabSidebar:;key:k' \
-  build/Build/Products/Debug/Codecave.app
+open -n -W --env HYPERTTY_SNAPSHOT=/tmp/shot --env 'HYPERTTY_SNAPSHOT_INPUT=ls' \
+  --env 'HYPERTTY_SNAPSHOT_ACTIONS=new_tab;@focusTabSidebar:;key:k' \
+  build/Build/Products/Debug/Hypertty.app
 # -> /tmp/shot.png, /tmp/shot.txt (see DebugSnapshot.swift for step syntax)
 ```
 
 To try Ghostty settings without editing your config, debug builds load
-`CODECAVE_EXTRA_CONFIG=/path/to/file` on top of it.
+`HYPERTTY_EXTRA_CONFIG=/path/to/file` on top of it.
