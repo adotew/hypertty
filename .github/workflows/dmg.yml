@@ -17,14 +17,10 @@ jobs:
         with:
           submodules: true
 
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-
-      - run: brew install xcodegen
+      - run: brew install xcodegen zig@0.15
 
       - name: Build
-        run: make release ZIG="$(which zig)"
+        run: make release
 
       - name: Package
         run: |
